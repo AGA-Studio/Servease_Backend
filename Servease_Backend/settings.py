@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',
     'core',
 ]
 
@@ -76,8 +77,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'servease_db',
-        'USER': 'tu_usuario',
-        'PASSWORD': 'tu_password',
+        'USER': 'servease_user',
+        'PASSWORD': 'AGA_Studio',
         'HOST': 'localhost',
         'PORT': '5432',
     }
