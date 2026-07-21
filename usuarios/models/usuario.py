@@ -15,7 +15,7 @@ class Usuario(models.Model):
     celular = models.CharField(max_length=20, blank=True, null=True)
     url_foto_perfil = models.URLField(blank=True, null=True)
     fecha_registro = models.DateTimeField(auto_now_add=True)
-    estado = models.CharField(max_length=50, default='activo')
+    estado = models.BooleanField(default=True)
 
     rol = models.ForeignKey(
         Rol, on_delete=models.PROTECT, db_column='id_rol', related_name='usuarios'
