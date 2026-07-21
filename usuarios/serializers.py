@@ -10,6 +10,7 @@ ROL_ID_TO_ROLE = {
 
 class UsuarioSerializer(serializers.ModelSerializer):
     rol = serializers.SerializerMethodField()
+    estado = serializers.BooleanField(source='activo')
     id_categoria = serializers.IntegerField(source='categoria_id', allow_null=True)
     id_empresa = serializers.IntegerField(source='empresa_id', allow_null=True)
 
