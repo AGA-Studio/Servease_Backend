@@ -27,9 +27,8 @@ class SupabaseAuthentication(BaseAuthentication):
         except jwt.InvalidTokenError:
             raise AuthenticationFailed('Token inválido o expirado')
 
-        supabase_uid = payload.get('sub')
         try:
-            usuario = Usuario.objects.get(supabase_uid=supabase_uid)
+            usuario = Usuario.objects.get(pk=payload.get('sub'))
         except Usuario.DoesNotExist:
             raise AuthenticationFailed('Usuario no encontrado en el sistema')
 
