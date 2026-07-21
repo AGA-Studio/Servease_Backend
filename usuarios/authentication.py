@@ -23,6 +23,7 @@ class SupabaseAuthentication(BaseAuthentication):
                 signing_key.key,
                 algorithms=['ES256', 'RS256'],
                 audience='authenticated',
+                issuer=f'{settings.SUPABASE_URL}/auth/v1',
             )
         except jwt.InvalidTokenError:
             raise AuthenticationFailed('Token inválido o expirado')
