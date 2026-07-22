@@ -54,3 +54,11 @@ class UpdateProfilePhotoSerializer(serializers.Serializer):
                 'La URL debe apuntar a tu propia carpeta en el bucket de fotos de perfil.'
             )
         return value
+
+class UpdatePersonalInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Usuario
+        fields = [
+            'nombre', 'segundo_nombre', 'apellido_pa', 'apellido_ma',
+            'celular', 'descripcion_perfil',
+        ]
