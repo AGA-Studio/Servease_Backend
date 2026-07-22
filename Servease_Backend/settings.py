@@ -124,9 +124,19 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'signup': '5/hour',
+    },
 }
 
 
 # Supabase Auth
 SUPABASE_URL = config('SUPABASE_URL')
 SUPABASE_JWKS_URL = config('SUPABASE_JWKS_URL')
+SUPABASE_ANON_KEY = config('SUPABASE_ANON_KEY')
+# Service role key: full admin access, never expose to frontend.
+# Get it from Supabase Dashboard > Project Settings > API > service_role secret.
+SUPABASE_SERVICE_ROLE_KEY = config('SUPABASE_SERVICE_ROLE_KEY')
