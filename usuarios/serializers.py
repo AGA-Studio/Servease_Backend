@@ -23,3 +23,16 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
     def get_rol(self, obj):
         return ROL_ID_TO_ROLE.get(obj.rol_id, "client")
+
+
+class SignupSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(min_length=6, write_only=True)
+    nombre = serializers.CharField(max_length=100)
+    segundo_nombre = serializers.CharField(
+        max_length=100, required=False, allow_blank=True
+    )
+    apellido_pa = serializers.CharField(max_length=100)
+    apellido_ma = serializers.CharField(
+        max_length=100, required=False, allow_blank=True
+    )
