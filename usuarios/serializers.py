@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 from .models import Usuario
 
@@ -37,3 +38,19 @@ class SignupSerializer(serializers.Serializer):
     apellido_ma = serializers.CharField(
         max_length=100, required=False, allow_blank=True
     )
+
+
+class UpdateProfilePhotoSerializer(serializers.Serializer):
+    url_foto_perfil = serializers.URLField(max_length=200)
+
+    def validate_url_foto_perfil(self, value):
+        usuario = self.context['request'].user
+        expected_prefix = (
+            f'{settings.SUPABASE_URL}/storage/v1/object/public/'
+            f'profile_photos/user_{usuario.id_usuario}/'
+        )
+        if not value.startswith(expected_prefix):
+            raise serializers.ValidationError(
+                'La URL debe apuntar a tu propia carpeta en el bucket de fotos de perfil.'
+            )
+        return value
