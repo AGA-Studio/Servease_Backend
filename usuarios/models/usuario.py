@@ -34,5 +34,9 @@ class Usuario(models.Model):
         db_table = 'usuario'
         managed = False
 
+    @property
+    def is_authenticated(self):
+        return True
+
     def __str__(self):
         return f"{self.nombre} {self.apellido_pa}"
