@@ -1,6 +1,6 @@
 from django.conf import settings
 from rest_framework import serializers
-from .models import Usuario
+from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente
 
 ROL_ID_TO_ROLE = {
     1: "client",
@@ -55,3 +55,23 @@ class UpdateProfilePhotoSerializer(serializers.Serializer):
                 'La URL debe apuntar a tu propia carpeta en el bucket de fotos de perfil.'
             )
         return value
+
+class UpdatePersonalInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Usuario
+        fields = [
+            'nombre', 'segundo_nombre', 'apellido_pa', 'apellido_ma',
+            'celular', 'descripcion_perfil',
+        ]
+
+
+class PerfilClienteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaPerfilCliente
+        fields = '__all__'
+
+
+class ReviewClienteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaReviewsCliente
+        fields = '__all__'
