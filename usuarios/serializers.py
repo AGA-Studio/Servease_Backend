@@ -38,6 +38,7 @@ class SignupSerializer(serializers.Serializer):
     apellido_ma = serializers.CharField(
         max_length=100, required=False, allow_blank=True
     )
+    photo = serializers.ImageField(required=False, allow_null=True)
 
 
 class UpdateProfilePhotoSerializer(serializers.Serializer):
