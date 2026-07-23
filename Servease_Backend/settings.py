@@ -129,6 +129,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'signup': '5/hour',
+        'confirm-email': '20/hour',
     },
 }
 
@@ -140,3 +141,10 @@ SUPABASE_ANON_KEY = config('SUPABASE_ANON_KEY')
 # Service role key: full admin access, never expose to frontend.
 # Get it from Supabase Dashboard > Project Settings > API > service_role secret.
 SUPABASE_SERVICE_ROLE_KEY = config('SUPABASE_SERVICE_ROLE_KEY')
+
+# Resend (transactional email)
+RESEND_API_KEY = config('RESEND_API_KEY', default='')
+RESEND_FROM_EMAIL = config('RESEND_FROM_EMAIL', default='no-reply@servease.com')
+
+# Base URL of the frontend, used to build links inside emails.
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')

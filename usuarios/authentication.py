@@ -33,4 +33,9 @@ class SupabaseAuthentication(BaseAuthentication):
         except Usuario.DoesNotExist:
             raise AuthenticationFailed('Usuario no encontrado en el sistema')
 
+        if not usuario.estado:
+            raise AuthenticationFailed(
+                'Tu cuenta no ha sido confirmada. Revisa tu correo.'
+            )
+
         return (usuario, token)

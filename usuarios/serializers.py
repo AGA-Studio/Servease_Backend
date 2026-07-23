@@ -1,6 +1,6 @@
 from django.conf import settings
 from rest_framework import serializers
-from .models import Usuario
+from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente
 
 ROL_ID_TO_ROLE = {
     1: "client",
@@ -38,6 +38,7 @@ class SignupSerializer(serializers.Serializer):
     apellido_ma = serializers.CharField(
         max_length=100, required=False, allow_blank=True
     )
+    photo = serializers.ImageField(required=False, allow_null=True)
 
 
 class UpdateProfilePhotoSerializer(serializers.Serializer):
@@ -62,3 +63,15 @@ class UpdatePersonalInfoSerializer(serializers.ModelSerializer):
             'nombre', 'segundo_nombre', 'apellido_pa', 'apellido_ma',
             'celular', 'descripcion_perfil',
         ]
+
+
+class PerfilClienteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaPerfilCliente
+        fields = '__all__'
+
+
+class ReviewClienteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaReviewsCliente
+        fields = '__all__'

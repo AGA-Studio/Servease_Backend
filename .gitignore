@@ -19,4 +19,5 @@ staticfiles/
 
 # Variables de entorno
 .env
-.env.local
+.env.local__pycache__/
+*.pyc
