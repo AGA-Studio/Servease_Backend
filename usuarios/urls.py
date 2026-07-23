@@ -5,6 +5,7 @@ urlpatterns = [
     path('auth/', views.MeView.as_view(), name='usuario-me'),
     path('auth/personal-info/', views.UpdatePersonalInfoView.as_view(), name='usuario-personal-info'),
     path('signup/', views.SignupView.as_view(), name='usuario-signup'),
+    path('confirm-email/', views.ConfirmEmailView.as_view(), name='usuario-confirm-email'),
     path('settings/password-reset/', views.RequestPasswordResetView.as_view(), name='usuario-password-reset'),
     path('mfa/enroll/', views.MfaEnrollView.as_view(), name='usuario-mfa-enroll'),
     path('mfa/<str:factor_id>/challenge/', views.MfaChallengeView.as_view(), name='usuario-mfa-challenge'),
