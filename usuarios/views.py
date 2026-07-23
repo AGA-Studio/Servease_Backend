@@ -1,4 +1,5 @@
 import requests
+from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -6,8 +7,12 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.conf import settings
 
-from .models import Usuario
+from servicios.models import Servicio
+from servicios.serializers import ServicioSerializer
+from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente
 from .serializers import (
+    PerfilClienteSerializer,
+    ReviewClienteSerializer,
     SignupSerializer,
     UpdateProfilePhotoSerializer,
     UpdatePersonalInfoSerializer,
@@ -173,6 +178,38 @@ class DisableUserView(APIView):
         usuario.estado = False
         usuario.save(update_fields=['estado'])
         return Response(UsuarioSerializer(usuario).data)
+
+
+class PerfilClienteView(RetrieveAPIView):
+    """Perfil público de un cliente (datos generales + rating)."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = PerfilClienteSerializer
+    queryset = VistaPerfilCliente.objects.all()
+    lookup_field = 'id_usuario'
+    lookup_url_kwarg = 'id_usuario'
+
+
+class ReviewsClienteView(ListAPIView):
+    """Reviews recibidas por un cliente, más recientes primero."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ReviewClienteSerializer
+
+    def get_queryset(self):
+        return VistaReviewsCliente.objects.filter(
+            cliente_id=self.kwargs['id_usuario']
+        ).order_by('-fecha')
+
+
+class UltimasPublicacionesClienteView(ListAPIView):
+    """Últimas 5 publicaciones (servicios) de un cliente."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ServicioSerializer
+
+    def get_queryset(self):
+        return Servicio.objects.raw(
+            'SELECT * FROM ultimas_publicaciones_cliente(%s)',
+            [str(self.kwargs['id_usuario'])],
+        )
 
 
 class SignupView(APIView):

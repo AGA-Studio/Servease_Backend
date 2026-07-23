@@ -2,7 +2,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from usuarios.models import Categoria
-from .models import Servicio
+from .models import Servicio, VistaInfoAplicantes, VistaPostDetails
 
 
 class ServicioSerializer(serializers.ModelSerializer):
@@ -51,3 +51,15 @@ class CreateServicioSerializer(serializers.ModelSerializer):
         validated_data['cliente'] = self.context['request'].user
         validated_data['estado'] = 'pendiente'
         return Servicio.objects.create(**validated_data)
+
+
+class InfoAplicanteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaInfoAplicantes
+        fields = '__all__'
+
+
+class PostDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaPostDetails
+        fields = '__all__'
