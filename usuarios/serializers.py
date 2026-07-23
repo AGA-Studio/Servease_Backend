@@ -20,7 +20,8 @@ class UsuarioSerializer(serializers.ModelSerializer):
         fields = [
             'id_usuario', 'nombre', 'segundo_nombre', 'apellido_pa',
             'apellido_ma', 'correo', 'celular', 'url_foto_perfil',
-            'fecha_registro', 'estado', 'rol', 'id_categoria', 'id_empresa',
+            'descripcion_perfil', 'fecha_registro', 'estado', 'rol',
+            'id_categoria', 'id_empresa',
         ]
 
     def get_rol(self, obj):
