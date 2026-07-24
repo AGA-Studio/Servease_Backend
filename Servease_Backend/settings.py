@@ -131,6 +131,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'signup': '5/hour',
         'confirm-email': '20/hour',
+        'servicio-create': '1/hour',
     },
 }
 
