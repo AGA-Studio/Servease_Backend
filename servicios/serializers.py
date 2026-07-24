@@ -19,6 +19,15 @@ class ServicioSerializer(serializers.ModelSerializer):
 
 
 class CreateServicioSerializer(serializers.ModelSerializer):
+    precio_inicial = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=1
+    )
+    latitud = serializers.DecimalField(
+        max_digits=9, decimal_places=6, min_value=-90, max_value=90
+    )
+    longitud = serializers.DecimalField(
+        max_digits=9, decimal_places=6, min_value=-180, max_value=180
+    )
     id_categoria = serializers.PrimaryKeyRelatedField(
         source='categoria', queryset=Categoria.objects.all()
     )
@@ -26,15 +35,11 @@ class CreateServicioSerializer(serializers.ModelSerializer):
         child=serializers.URLField(max_length=500), required=False, default=list
     )
 
-    precio_inicial = serializers.DecimalField(
-        max_digits=10, decimal_places=2, min_value=1
-    )
-
     class Meta:
         model = Servicio
         fields = [
             'titulo', 'descripcion', 'precio_inicial',
-            'latitud', 'longitud', 'imagenes', 'id_categoria',
+            'latitud', 'longitud', 'fecha','imagenes', 'id_categoria',
         ]
 
     def validate_imagenes(self, value):
@@ -50,6 +55,12 @@ class CreateServicioSerializer(serializers.ModelSerializer):
                     'bucket de imágenes de servicios.'
                 )
         return value
+    
+    def create(self, validated_data):
+        validated_data['cliente'] = self.context['request'].user
+        validated_data['estado'] = 'abierto'
+        return Servicio.objects.create(**validated_data)
+
 
 
 class UpdateServicioSerializer(serializers.ModelSerializer):
@@ -62,12 +73,18 @@ class UpdateServicioSerializer(serializers.ModelSerializer):
     precio_inicial = serializers.DecimalField(
         max_digits=10, decimal_places=2, min_value=1, required=False
     )
+    latitud = serializers.DecimalField(
+        max_digits=9, decimal_places=6, min_value=-90, max_value=90, required=False
+    )
+    longitud = serializers.DecimalField(
+        max_digits=9, decimal_places=6, min_value=-180, max_value=180, required=False
+    )
 
     class Meta:
         model = Servicio
         fields = [
             'titulo', 'descripcion', 'precio_inicial',
-            'latitud', 'longitud', 'imagenes', 'id_categoria',
+            'latitud', 'longitud', 'fecha','imagenes', 'id_categoria',
         ]
 
     def validate_imagenes(self, value):
@@ -85,10 +102,6 @@ class UpdateServicioSerializer(serializers.ModelSerializer):
         return value
     
 
-    def create(self, validated_data):
-        validated_data['cliente'] = self.context['request'].user
-        validated_data['estado'] = 'abierto'
-        return Servicio.objects.create(**validated_data)
 
 
 class InfoAplicanteSerializer(serializers.ModelSerializer):

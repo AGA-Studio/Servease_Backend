@@ -15,4 +15,5 @@ urlpatterns = [
     path('<uuid:id_usuario>/reviews/', views.ReviewsClienteView.as_view(), name='usuario-reviews'),
     path('<uuid:id_usuario>/ultimas-publicaciones/', views.UltimasPublicacionesClienteView.as_view(), name='usuario-ultimas-publicaciones'),
     path('<uuid:id_usuario>/home/', views.HomeClienteView.as_view(), name='usuario-home-cliente'),
+    path('<uuid:id_usuario>/mis-publicaciones/', views.MisPublicacionesView.as_view(), name='usuario-mis-publicaciones'),
 ]
