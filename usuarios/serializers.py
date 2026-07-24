@@ -1,6 +1,6 @@
 from django.conf import settings
 from rest_framework import serializers
-from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente
+from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente,VistaHomeCliente
 
 ROL_ID_TO_ROLE = {
     1: "client",
@@ -20,7 +20,8 @@ class UsuarioSerializer(serializers.ModelSerializer):
         fields = [
             'id_usuario', 'nombre', 'segundo_nombre', 'apellido_pa',
             'apellido_ma', 'correo', 'celular', 'url_foto_perfil',
-            'fecha_registro', 'estado', 'rol', 'id_categoria', 'id_empresa',
+            'descripcion_perfil', 'fecha_registro', 'estado', 'rol',
+            'id_categoria', 'id_empresa',
         ]
 
     def get_rol(self, obj):
@@ -74,4 +75,9 @@ class PerfilClienteSerializer(serializers.ModelSerializer):
 class ReviewClienteSerializer(serializers.ModelSerializer):
     class Meta:
         model = VistaReviewsCliente
+        fields = '__all__'
+
+class HomeClienteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaHomeCliente
         fields = '__all__'
