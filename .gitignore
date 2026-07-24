@@ -19,7 +19,8 @@ staticfiles/
 
 # Variables de entorno
 .env
-.env.local__pycache__/
-*.pyc
+.env.local
 
+# macOS
 .DS_Store
+**/.DS_Store
