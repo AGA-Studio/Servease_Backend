@@ -21,3 +21,5 @@ staticfiles/
 .env
 .env.local__pycache__/
 *.pyc
+
+.DS_Store
