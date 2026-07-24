@@ -77,6 +77,10 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD'),
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default='5432'),
+        # La DB es Postgres remoto (Supabase); sin esto Django cierra y
+        # reabre la conexión (TCP+TLS) en cada request, ~0.6-0.9s de tax.
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
