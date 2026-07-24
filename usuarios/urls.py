@@ -14,4 +14,5 @@ urlpatterns = [
     path('<uuid:id_usuario>/perfil-cliente/', views.PerfilClienteView.as_view(), name='usuario-perfil-cliente'),
     path('<uuid:id_usuario>/reviews/', views.ReviewsClienteView.as_view(), name='usuario-reviews'),
     path('<uuid:id_usuario>/ultimas-publicaciones/', views.UltimasPublicacionesClienteView.as_view(), name='usuario-ultimas-publicaciones'),
+    path('<uuid:id_usuario>/home/', views.HomeClienteView.as_view(), name='usuario-home-cliente'),
 ]

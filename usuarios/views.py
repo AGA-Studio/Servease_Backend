@@ -14,9 +14,10 @@ from rest_framework import status
 from servicios.models import Servicio
 from servicios.serializers import ServicioSerializer
 from .emails import send_confirmation_email
-from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente
+from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente
 from .permissions import IsAdminRole, IsClientRole
 from .serializers import (
+    HomeClienteSerializer,
     PerfilClienteSerializer,
     ReviewClienteSerializer,
     SignupSerializer,
@@ -201,6 +202,17 @@ class PerfilClienteView(RetrieveAPIView):
     queryset = VistaPerfilCliente.objects.all()
     lookup_field = 'id_usuario'
     lookup_url_kwarg = 'id_usuario'
+
+
+class HomeClienteView(ListAPIView):
+    """Servicios recomendados para la pantalla de inicio del cliente."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = HomeClienteSerializer
+
+    def get_queryset(self):
+        return VistaHomeCliente.objects.filter(
+            cliente_id=self.kwargs['id_usuario']
+        )
 
 
 class ReviewsClienteView(ListAPIView):
