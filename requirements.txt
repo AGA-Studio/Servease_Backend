@@ -21,3 +21,4 @@ sqlparse==0.5.5
 supabase==2.31.0
 urllib3==2.7.0
 whitenoise==6.12.0
+django-filter==26.1
