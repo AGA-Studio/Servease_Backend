@@ -1,6 +1,6 @@
 from django.conf import settings
 from rest_framework import serializers
-from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente,VistaHomeCliente
+from .models import Categoria, Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente
 
 ROL_ID_TO_ROLE = {
     1: "client",
@@ -64,6 +64,12 @@ class UpdatePersonalInfoSerializer(serializers.ModelSerializer):
             'nombre', 'segundo_nombre', 'apellido_pa', 'apellido_ma',
             'celular', 'descripcion_perfil',
         ]
+
+
+class CategoriaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Categoria
+        fields = ['id_categoria', 'nombre']
 
 
 class PerfilClienteSerializer(serializers.ModelSerializer):
