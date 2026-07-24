@@ -11,6 +11,13 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework import status
 
+
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.pagination import PageNumberPagination
+from django_filters.rest_framework import DjangoFilterBackend
+from servicios.models import Servicio
+from servicios.serializers import ServicioListSerializer
+
 from servicios.models import Servicio
 from servicios.serializers import ServicioSerializer
 from .emails import send_confirmation_email
@@ -232,11 +239,15 @@ class UltimasPublicacionesClienteView(ListAPIView):
     serializer_class = ServicioSerializer
 
     def get_queryset(self):
+        id_usuario = self.kwargs['id_usuario']
+        if str(self.request.user.id_usuario) != str(id_usuario):
+            raise PermissionDenied(
+                'No puedes ver las publicaciones de otro usuario.'
+            )
         return Servicio.objects.raw(
             'SELECT * FROM ultimas_publicaciones_cliente(%s)',
-            [str(self.kwargs['id_usuario'])],
+            [str(id_usuario)],
         )
-
 
 class SignupView(APIView):
     authentication_classes = []
@@ -357,3 +368,25 @@ class ConfirmEmailView(APIView):
             usuario.save(update_fields=['estado'])
 
         return Response({'detail': 'Cuenta confirmada. Ya puedes iniciar sesión.'})
+
+class MisPublicacionesPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
+class MisPublicacionesView(ListAPIView):
+    """Todas las publicaciones de un cliente, paginadas y filtrables."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ServicioListSerializer
+    pagination_class = MisPublicacionesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['estado', 'categoria_id']
+
+    def get_queryset(self):
+        id_usuario = self.kwargs['id_usuario']
+        if str(self.request.user.id_usuario) != str(id_usuario):
+            raise PermissionDenied(
+                'No puedes ver las publicaciones de otro usuario.'
+            )
+        return Servicio.objects.filter(cliente_id=id_usuario).order_by('-fecha')
