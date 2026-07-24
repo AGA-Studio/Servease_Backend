@@ -9,6 +9,7 @@ from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle 
 
 from usuarios.permissions import IsClientRole
 from .models import Servicio, VistaInfoAplicantes, VistaPostDetails
@@ -24,6 +25,8 @@ from .serializers import (
 class ServicioCreateView(APIView):
     """Crea una nueva solicitud de servicio. Solo rol cliente."""
     permission_classes = [IsAuthenticated, IsClientRole]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'servicio-create'
 
     def post(self, request):
         serializer = CreateServicioSerializer(
