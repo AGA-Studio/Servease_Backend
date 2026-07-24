@@ -21,9 +21,10 @@ from servicios.serializers import ServicioListSerializer
 from servicios.models import Servicio
 from servicios.serializers import ServicioSerializer
 from .emails import send_confirmation_email
-from .models import Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente
+from .models import Categoria, Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente
 from .permissions import IsAdminRole, IsClientRole
 from .serializers import (
+    CategoriaSerializer,
     HomeClienteSerializer,
     PerfilClienteSerializer,
     ReviewClienteSerializer,
@@ -200,6 +201,22 @@ class DisableUserView(APIView):
         usuario.estado = False
         usuario.save(update_fields=['estado'])
         return Response(UsuarioSerializer(usuario).data)
+
+
+class CategoriaListView(ListAPIView):
+    """Lista todas las categorías (solo id y nombre)."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = CategoriaSerializer
+    queryset = Categoria.objects.all()
+
+
+class CategoriaDetailView(RetrieveAPIView):
+    """Detalle de una categoría por id (solo id y nombre)."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = CategoriaSerializer
+    queryset = Categoria.objects.all()
+    lookup_field = 'id_categoria'
+    lookup_url_kwarg = 'id_categoria'
 
 
 class PerfilClienteView(RetrieveAPIView):
