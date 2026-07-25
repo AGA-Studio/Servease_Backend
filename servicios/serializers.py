@@ -1,8 +1,18 @@
+from decimal import Decimal
+
 from django.conf import settings
 from rest_framework import serializers
 
 from usuarios.models import Categoria
 from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails
+
+# Bounding box del área urbana de Tijuana (excluye Tecate, Rosarito, Ensenada).
+# Es un rectángulo aproximado, no el polígono real del municipio.
+TIJUANA_LAT_MIN = Decimal('32.40')
+TIJUANA_LAT_MAX = Decimal('32.56')
+TIJUANA_LON_MIN = Decimal('-117.15')
+TIJUANA_LON_MAX = Decimal('-116.78')
+UBICACION_FUERA_DE_TIJUANA = 'La ubicación debe estar dentro del área de Tijuana.'
 
 
 class ServicioSerializer(serializers.ModelSerializer):
@@ -29,10 +39,20 @@ class CreateServicioSerializer(serializers.ModelSerializer):
         max_digits=10, decimal_places=2, min_value=1
     )
     latitud = serializers.DecimalField(
-        max_digits=9, decimal_places=6, min_value=-90, max_value=90
+        max_digits=9, decimal_places=6,
+        min_value=TIJUANA_LAT_MIN, max_value=TIJUANA_LAT_MAX,
+        error_messages={
+            'min_value': UBICACION_FUERA_DE_TIJUANA,
+            'max_value': UBICACION_FUERA_DE_TIJUANA,
+        },
     )
     longitud = serializers.DecimalField(
-        max_digits=9, decimal_places=6, min_value=-180, max_value=180
+        max_digits=9, decimal_places=6,
+        min_value=TIJUANA_LON_MIN, max_value=TIJUANA_LON_MAX,
+        error_messages={
+            'min_value': UBICACION_FUERA_DE_TIJUANA,
+            'max_value': UBICACION_FUERA_DE_TIJUANA,
+        },
     )
     id_categoria = serializers.PrimaryKeyRelatedField(
         source='categoria', queryset=Categoria.objects.all()
@@ -44,13 +64,14 @@ class CreateServicioSerializer(serializers.ModelSerializer):
     imagenes = serializers.ListField(
         child=serializers.URLField(max_length=500), required=False, default=list
     )
+    fecha_final = serializers.DateTimeField(required=False, allow_null=True)
 
     class Meta:
         model = Servicio
         fields = [
             'titulo', 'descripcion', 'precio_inicial',
             'latitud', 'longitud', 'fecha','imagenes', 'id_categoria',
-            'id_tipo_cambio',
+            'id_tipo_cambio', 'fecha_final',
         ]
 
     def validate_imagenes(self, value):
@@ -85,10 +106,20 @@ class UpdateServicioSerializer(serializers.ModelSerializer):
         max_digits=10, decimal_places=2, min_value=1, required=False
     )
     latitud = serializers.DecimalField(
-        max_digits=9, decimal_places=6, min_value=-90, max_value=90, required=False
+        max_digits=9, decimal_places=6, required=False,
+        min_value=TIJUANA_LAT_MIN, max_value=TIJUANA_LAT_MAX,
+        error_messages={
+            'min_value': UBICACION_FUERA_DE_TIJUANA,
+            'max_value': UBICACION_FUERA_DE_TIJUANA,
+        },
     )
     longitud = serializers.DecimalField(
-        max_digits=9, decimal_places=6, min_value=-180, max_value=180, required=False
+        max_digits=9, decimal_places=6, required=False,
+        min_value=TIJUANA_LON_MIN, max_value=TIJUANA_LON_MAX,
+        error_messages={
+            'min_value': UBICACION_FUERA_DE_TIJUANA,
+            'max_value': UBICACION_FUERA_DE_TIJUANA,
+        },
     )
 
     class Meta:
