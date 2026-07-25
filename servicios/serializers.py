@@ -2,19 +2,20 @@ from django.conf import settings
 from rest_framework import serializers
 
 from usuarios.models import Categoria
-from .models import Servicio, VistaInfoAplicantes, VistaPostDetails
+from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails
 
 
 class ServicioSerializer(serializers.ModelSerializer):
     id_cliente = serializers.UUIDField(source='cliente_id')
     id_categoria = serializers.IntegerField(source='categoria_id')
+    id_tipo_cambio = serializers.IntegerField(source='tipo_cambio_id', allow_null=True)
 
     class Meta:
         model = Servicio
         fields = [
             'id_servicio', 'titulo', 'descripcion', 'precio_inicial',
             'latitud', 'longitud', 'fecha', 'estado', 'imagenes',
-            'fecha_final', 'id_cliente', 'id_categoria',
+            'fecha_final', 'id_cliente', 'id_categoria', 'id_tipo_cambio',
         ]
 
 
@@ -31,6 +32,10 @@ class CreateServicioSerializer(serializers.ModelSerializer):
     id_categoria = serializers.PrimaryKeyRelatedField(
         source='categoria', queryset=Categoria.objects.all()
     )
+    id_tipo_cambio = serializers.PrimaryKeyRelatedField(
+        source='tipo_cambio', queryset=TipoCambio.objects.all(),
+        required=False, allow_null=True
+    )
     imagenes = serializers.ListField(
         child=serializers.URLField(max_length=500), required=False, default=list
     )
@@ -40,6 +45,7 @@ class CreateServicioSerializer(serializers.ModelSerializer):
         fields = [
             'titulo', 'descripcion', 'precio_inicial',
             'latitud', 'longitud', 'fecha','imagenes', 'id_categoria',
+            'id_tipo_cambio',
         ]
 
     def validate_imagenes(self, value):
@@ -55,7 +61,7 @@ class CreateServicioSerializer(serializers.ModelSerializer):
                     'bucket de imágenes de servicios.'
                 )
         return value
-    
+
     def create(self, validated_data):
         validated_data['cliente'] = self.context['request'].user
         validated_data['estado'] = 'abierto'
