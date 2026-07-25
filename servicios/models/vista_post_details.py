@@ -8,6 +8,7 @@ class VistaPostDetails(models.Model):
     latitud = models.DecimalField(max_digits=9, decimal_places=6)
     longitud = models.DecimalField(max_digits=9, decimal_places=6)
     fecha = models.DateTimeField()
+    fecha_final = models.DateTimeField(blank=True, null=True)
     estado = models.CharField(max_length=50)
     categoria = models.CharField(max_length=100)
     precio_inicial = models.DecimalField(max_digits=10, decimal_places=2)
