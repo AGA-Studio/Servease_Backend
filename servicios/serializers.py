@@ -9,6 +9,7 @@ class ServicioSerializer(serializers.ModelSerializer):
     id_cliente = serializers.UUIDField(source='cliente_id')
     id_categoria = serializers.IntegerField(source='categoria_id')
     id_tipo_cambio = serializers.IntegerField(source='tipo_cambio_id', allow_null=True)
+    tipo_cambio_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = Servicio
@@ -16,7 +17,11 @@ class ServicioSerializer(serializers.ModelSerializer):
             'id_servicio', 'titulo', 'descripcion', 'precio_inicial',
             'latitud', 'longitud', 'fecha', 'estado', 'imagenes',
             'fecha_final', 'id_cliente', 'id_categoria', 'id_tipo_cambio',
+            'tipo_cambio_nombre',
         ]
+
+    def get_tipo_cambio_nombre(self, obj):
+        return obj.tipo_cambio.nombre if obj.tipo_cambio_id else None
 
 
 class CreateServicioSerializer(serializers.ModelSerializer):
@@ -121,13 +126,18 @@ class PostDetailsSerializer(serializers.ModelSerializer):
         model = VistaPostDetails
         fields = '__all__'
 
-# Falto el serializer para la lista de servicios, que incluye el nombre de la categoría asociada a cada servicio. 
+# Falto el serializer para la lista de servicios, que incluye el nombre de la categoría asociada a cada servicio.
 class ServicioListSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+    tipo_cambio_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = Servicio
         fields = [
             'id_servicio', 'titulo', 'precio_inicial', 'latitud',
             'longitud', 'fecha', 'estado', 'imagenes', 'categoria_nombre',
+            'tipo_cambio_nombre',
         ]
+
+    def get_tipo_cambio_nombre(self, obj):
+        return obj.tipo_cambio.nombre if obj.tipo_cambio_id else None
