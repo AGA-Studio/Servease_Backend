@@ -44,13 +44,14 @@ class CreateServicioSerializer(serializers.ModelSerializer):
     imagenes = serializers.ListField(
         child=serializers.URLField(max_length=500), required=False, default=list
     )
+    fecha_final = serializers.DateTimeField(required=False, allow_null=True)
 
     class Meta:
         model = Servicio
         fields = [
             'titulo', 'descripcion', 'precio_inicial',
             'latitud', 'longitud', 'fecha','imagenes', 'id_categoria',
-            'id_tipo_cambio',
+            'id_tipo_cambio', 'fecha_final',
         ]
 
     def validate_imagenes(self, value):
