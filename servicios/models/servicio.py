@@ -13,8 +13,13 @@ class Servicio(models.Model):
     estado = models.CharField(max_length=50)
     imagenes = ArrayField(models.CharField(max_length=500), blank=True, default=list)
     fecha_final = models.DateTimeField(blank=True, null=True)
+    tipo_cambio = models.ForeignKey(
+            'TipoCambio', on_delete=models.SET_NULL, null=True, blank=True,
+            related_name='servicios'
+        )
     cliente = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='servicios_solicitados')
     categoria = models.ForeignKey('usuarios.Categoria', on_delete=models.PROTECT, related_name='servicios')
+    
 
     class Meta:
         db_table = 'servicio'
