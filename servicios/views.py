@@ -16,10 +16,13 @@ from .models import Servicio, VistaInfoAplicantes, VistaPostDetails
 from .serializers import (
     CreateServicioSerializer,
     InfoAplicanteSerializer,
+    OfertaSerializer,
     PostDetailsSerializer,
     ServicioListSerializer,
     ServicioSerializer,
     UpdateServicioSerializer,
+    CreateOfertaSerializer,
+    OfertaSerializer,
 )
 
 class ServicioCreateView(APIView):
@@ -111,3 +114,15 @@ class ServicioListView(ListAPIView):
     queryset = Servicio.objects.exclude(estado='cancelado').order_by('-fecha')
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['categoria_id', 'estado']
+
+class OfertaCreateView(APIView):
+    """Envia una oferta/contraoferta. Solo cliente dueño o proveedor de la postulacion."""
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'oferta-create'
+
+    def post(self, request):
+        serializer = CreateOfertaSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        oferta = serializer.save()
+        return Response(OfertaSerializer(oferta).data, status=status.HTTP_201_CREATED)

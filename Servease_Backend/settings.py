@@ -136,6 +136,7 @@ REST_FRAMEWORK = {
         'signup': '5/hour',
         'confirm-email': '20/hour',
         'servicio-create': '20/hour',
+        'oferta-create': '20/hour',
     },
 }
 

@@ -4,7 +4,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from usuarios.models import Categoria
-from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails
+from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta
 
 # Bounding box del área urbana de Tijuana (excluye Tecate, Rosarito, Ensenada).
 # Es un rectángulo aproximado, no el polígono real del municipio.
@@ -172,3 +172,49 @@ class ServicioListSerializer(serializers.ModelSerializer):
 
     def get_tipo_cambio_nombre(self, obj):
         return obj.tipo_cambio.nombre if obj.tipo_cambio_id else None
+
+
+
+
+# Oferta y postulacion
+
+
+
+class OfertaSerializer(serializers.ModelSerializer):
+    id_postulacion = serializers.IntegerField(source='postulacion_id')
+    emisor_id = serializers.UUIDField()
+
+    class Meta:
+        model = Oferta
+        fields = [
+            'id_oferta', 'aceptacion', 'monto', 'fecha', 'estado',
+            'comentario', 'id_postulacion', 'emisor_id',
+        ]
+
+
+class CreateOfertaSerializer(serializers.ModelSerializer):
+    id_postulacion = serializers.PrimaryKeyRelatedField(
+        source='postulacion', queryset=Postulacion.objects.all()
+    )
+    monto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1)
+
+    class Meta:
+        model = Oferta
+        fields = ['id_postulacion', 'monto', 'comentario']
+
+    def validate(self, attrs):
+        postulacion = attrs['postulacion']
+        usuario = self.context['request'].user
+        cliente_id = postulacion.servicio.cliente_id
+        proveedor_id = postulacion.proveedor_id
+        if usuario.id_usuario not in (cliente_id, proveedor_id):
+            raise serializers.ValidationError(
+                'No puedes enviar una oferta en una postulación que no te pertenece.'
+            )
+        return attrs
+
+    def create(self, validated_data):
+        validated_data['emisor'] = self.context['request'].user
+        validated_data['estado'] = 'pendiente'
+        validated_data['aceptacion'] = False
+        return Oferta.objects.create(**validated_data)

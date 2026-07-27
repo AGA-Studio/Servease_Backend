@@ -10,6 +10,7 @@ class Oferta(models.Model):
     estado = models.CharField(max_length=50)
     comentario = models.TextField(blank=True, null=True)
     postulacion = models.ForeignKey(Postulacion, on_delete=models.CASCADE, related_name='ofertas')
+    emisor = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='ofertas_enviadas')
 
     class Meta:
         db_table = 'oferta'
