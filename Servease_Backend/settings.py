@@ -136,6 +136,8 @@ REST_FRAMEWORK = {
         'signup': '5/hour',
         'confirm-email': '20/hour',
         'servicio-create': '20/hour',
+        'mfa-backup-generate': '10/hour',
+        'mfa-backup-verify': '15/hour',
     },
 }
 
