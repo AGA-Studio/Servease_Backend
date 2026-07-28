@@ -5,42 +5,86 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('servicios', '0001_initial'),
-        ('usuarios', '0001_initial'),
+        ("servicios", "0001_initial"),
+        ("usuarios", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Conversacion',
+            name="Conversacion",
             fields=[
-                ('id_conversacion', models.AutoField(primary_key=True, serialize=False)),
-                ('fecha_inicio', models.DateTimeField(auto_now_add=True)),
-                ('estado', models.CharField(max_length=50)),
-                ('cliente', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversaciones_como_cliente', to='usuarios.usuario')),
-                ('proveedor', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversaciones_como_proveedor', to='usuarios.usuario')),
-                ('servicio', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversaciones', to='servicios.servicio')),
+                (
+                    "id_conversacion",
+                    models.AutoField(primary_key=True, serialize=False),
+                ),
+                ("fecha_inicio", models.DateTimeField(auto_now_add=True)),
+                ("estado", models.CharField(max_length=50)),
+                (
+                    "cliente",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="conversaciones_como_cliente",
+                        to="usuarios.usuario",
+                    ),
+                ),
+                (
+                    "proveedor",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="conversaciones_como_proveedor",
+                        to="usuarios.usuario",
+                    ),
+                ),
+                (
+                    "servicio",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="conversaciones",
+                        to="servicios.servicio",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'conversacion',
+                "db_table": "conversacion",
             },
         ),
         migrations.CreateModel(
-            name='Mensaje',
+            name="Mensaje",
             fields=[
-                ('id_mensaje', models.AutoField(primary_key=True, serialize=False)),
-                ('contenido', models.TextField()),
-                ('fecha', models.DateTimeField(auto_now_add=True)),
-                ('leido', models.BooleanField(default=False)),
-                ('conversacion', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='mensajes', to='mensajeria.conversacion')),
-                ('emisor', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='mensajes_enviados', to='usuarios.usuario')),
-                ('receptor', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='mensajes_recibidos', to='usuarios.usuario')),
+                ("id_mensaje", models.AutoField(primary_key=True, serialize=False)),
+                ("contenido", models.TextField()),
+                ("fecha", models.DateTimeField(auto_now_add=True)),
+                ("leido", models.BooleanField(default=False)),
+                (
+                    "conversacion",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="mensajes",
+                        to="mensajeria.conversacion",
+                    ),
+                ),
+                (
+                    "emisor",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="mensajes_enviados",
+                        to="usuarios.usuario",
+                    ),
+                ),
+                (
+                    "receptor",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="mensajes_recibidos",
+                        to="usuarios.usuario",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'mensaje',
+                "db_table": "mensaje",
             },
         ),
     ]
