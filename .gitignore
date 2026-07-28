@@ -24,3 +24,18 @@ staticfiles/
 # macOS
 .DS_Store
 **/.DS_Store
+
+# OpenCode / Bodega (personal dev config)
+.opencode/
+.omo/
+
+# Untracked migrations from other features (not ours)
+servicios/migrations/0003_*.py
+usuarios/migrations/0003_*.py
+
+# Project config/docs/infra - not for remote tracking
+.env.example
+supabase/
+
+# Docker / Compose
+PROJECT_CONTEXT.md
