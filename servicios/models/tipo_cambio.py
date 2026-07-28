@@ -6,8 +6,8 @@ class TipoCambio(models.Model):
     nombre = models.CharField(max_length=10)
 
     class Meta:
-        managed = False
-        db_table = 'tipo_cambio'
+        managed = True
+        db_table = "tipo_cambio"
 
     def __str__(self):
         return self.nombre
