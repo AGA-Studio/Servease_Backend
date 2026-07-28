@@ -12,9 +12,9 @@ CONFIRMATION_WINDOW = timedelta(hours=24)
 
 class Command(BaseCommand):
     help = (
-        'Deletes accounts (Usuario row, Supabase auth user, and any '
-        'uploaded profile photo) that were never confirmed within 24 hours '
-        'of signing up. Intended to run on a schedule (e.g. hourly cron).'
+        "Deletes accounts (Usuario row, Supabase auth user, and any "
+        "uploaded profile photo) that were never confirmed within 24 hours "
+        "of signing up. Intended to run on a schedule (e.g. hourly cron)."
     )
 
     def handle(self, *args, **options):
@@ -27,12 +27,12 @@ class Command(BaseCommand):
             delete_profile_photos(user_id)
             try:
                 get_supabase_admin().auth.admin.delete_user(str(user_id))
-            except Exception as exc:
-                self.stderr.write(
-                    f'Could not delete auth user {user_id}: {exc}'
-                )
+            except Exception as exc:  # noqa: BLE001
+                self.stderr.write(f"Could not delete auth user {user_id}: {exc}")
                 continue
             usuario.delete()
             count += 1
 
-        self.stdout.write(self.style.SUCCESS(f'Deleted {count} unconfirmed account(s).'))
+        self.stdout.write(
+            self.style.SUCCESS(f"Deleted {count} unconfirmed account(s).")
+        )
