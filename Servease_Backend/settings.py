@@ -31,6 +31,7 @@ INSTALLED_APPS = [
 
     'usuarios',
     'servicios',
+    'dashBoard',
     'mensajeria',
     'transacciones',
     'calificaciones',
