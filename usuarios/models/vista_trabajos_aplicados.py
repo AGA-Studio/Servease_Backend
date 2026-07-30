@@ -1,0 +1,17 @@
+from django.db import models
+ 
+ 
+class VistaTrabajosAplicados(models.Model):
+    id_postulacion = models.IntegerField(primary_key=True)
+    proveedor_id = models.UUIDField()
+    id_servicio = models.IntegerField()
+    titulo = models.CharField(max_length=150)
+    estado = models.CharField(max_length=50)
+    fecha_publicacion = models.DateTimeField()
+    tiempo_transcurrido = models.DurationField()
+    precio_final = models.DecimalField(max_digits=10, decimal_places=2)
+ 
+    class Meta:
+        managed = False
+        db_table = 'vista_trabajos_aplicados'
+ 
