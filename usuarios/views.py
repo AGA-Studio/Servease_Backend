@@ -108,6 +108,8 @@ class UpdatePersonalInfoView(APIView):
 class RequestPasswordResetView(APIView):
     """Dispara el correo de restablecimiento de contraseña de Supabase."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password-reset'
 
     def post(self, request):
         url = f"{settings.SUPABASE_URL}/auth/v1/recover"
@@ -133,6 +135,8 @@ class RequestPasswordResetView(APIView):
 class MfaEnrollView(APIView):
     """Inicia el registro de 2FA (TOTP): regresa QR/secret."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-enroll'
 
     def post(self, request):
         url = f"{settings.SUPABASE_URL}/auth/v1/factors"
@@ -159,6 +163,8 @@ class MfaEnrollView(APIView):
 class MfaChallengeView(APIView):
     """Crea el challenge para verificar el factor recién registrado."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-challenge'
 
     def post(self, request, factor_id):
         url = f"{settings.SUPABASE_URL}/auth/v1/factors/{factor_id}/challenge"
@@ -181,6 +187,8 @@ class MfaChallengeView(APIView):
 class MfaVerifyView(APIView):
     """Verifica el código TOTP ingresado por el usuario."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-verify'
 
     def post(self, request, factor_id):
         code = request.data.get('code')
