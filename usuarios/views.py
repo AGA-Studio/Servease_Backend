@@ -1,9 +1,13 @@
+import hashlib
+import hmac
 import logging
+import secrets
 
 import requests
 from django.conf import settings
 from django.core import signing
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
@@ -108,9 +112,14 @@ class RequestPasswordResetView(APIView):
     def post(self, request):
         url = f"{settings.SUPABASE_URL}/auth/v1/recover"
         headers = {"apikey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+        params = {"redirect_to": f"{settings.FRONTEND_URL}/reset-password"}
         try:
             response = requests.post(
-                url, json={"email": request.user.correo}, headers=headers, timeout=10
+                url,
+                params=params,
+                json={"email": request.user.correo},
+                headers=headers,
+                timeout=10,
             )
             response.raise_for_status()
         except requests.RequestException:
@@ -133,6 +142,9 @@ class MfaEnrollView(APIView):
             "Content-Type": "application/json",
         }
         body = {"factor_type": request.data.get('factor_type', 'totp')}
+        friendly_name = request.data.get('friendly_name')
+        if friendly_name:
+            body['friendly_name'] = friendly_name
         try:
             response = requests.post(url, json=body, headers=headers, timeout=10)
             response.raise_for_status()
@@ -194,6 +206,73 @@ class MfaVerifyView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(response.json())
+
+
+_BACKUP_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+_BACKUP_CODE_COUNT = 8
+
+
+def _generate_backup_code() -> str:
+    raw = ''.join(secrets.choice(_BACKUP_CODE_ALPHABET) for _ in range(10))
+    return f"{raw[:5]}-{raw[5:]}"
+
+
+def _hash_backup_code(code: str) -> str:
+    return hmac.new(
+        settings.SECRET_KEY.encode(), code.encode(), hashlib.sha256
+    ).hexdigest()
+
+
+class MfaBackupCodesGenerateView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-backup-generate'
+
+    def post(self, request):
+        MfaBackupCode.objects.filter(
+            usuario=request.user, used_at__isnull=True
+        ).delete()
+
+        codes = [_generate_backup_code() for _ in range(_BACKUP_CODE_COUNT)]
+        MfaBackupCode.objects.bulk_create([
+            MfaBackupCode(usuario=request.user, code_hash=_hash_backup_code(code))
+            for code in codes
+        ])
+
+        return Response({'codes': codes})
+
+
+class MfaBackupCodeVerifyView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-backup-verify'
+
+    def post(self, request):
+        code = (request.data.get('code') or '').strip().upper()
+        if not code:
+            return Response(
+                {'detail': 'code es requerido.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        code_hash = _hash_backup_code(code)
+        try:
+            backup_code = MfaBackupCode.objects.get(
+                usuario=request.user, code_hash=code_hash, used_at__isnull=True,
+            )
+        except MfaBackupCode.DoesNotExist:
+            return Response(
+                {'detail': 'Código inválido o ya utilizado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        backup_code.used_at = timezone.now()
+        backup_code.save(update_fields=['used_at'])
+
+        remaining = MfaBackupCode.objects.filter(
+            usuario=request.user, used_at__isnull=True,
+        ).count()
+        return Response({'detail': 'Código válido.', 'remaining': remaining})
 
 
 class DisableUserView(APIView):
