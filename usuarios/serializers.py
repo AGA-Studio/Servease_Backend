@@ -24,6 +24,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
     rol = serializers.SerializerMethodField()
     estado = serializers.BooleanField()
     id_categoria = serializers.IntegerField(source='categoria_id', allow_null=True)
+    id_categorias = serializers.SerializerMethodField()
     id_empresa = serializers.IntegerField(source='empresa_id', allow_null=True)
 
     class Meta:
@@ -32,11 +33,14 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'id_usuario', 'nombre', 'segundo_nombre', 'apellido_pa',
             'apellido_ma', 'correo', 'celular', 'url_foto_perfil',
             'descripcion_perfil', 'fecha_registro', 'estado', 'rol',
-            'id_categoria', 'id_empresa',
+            'id_categoria', 'id_categorias', 'id_empresa',
         ]
 
     def get_rol(self, obj):
         return ROL_ID_TO_ROLE.get(obj.rol_id, "client")
+
+    def get_id_categorias(self, obj):
+        return list(obj.areas_trabajo.values('id_categoria', 'nombre'))
 
 
 class SignupSerializer(serializers.Serializer):
