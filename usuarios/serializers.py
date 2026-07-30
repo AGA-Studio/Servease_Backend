@@ -1,6 +1,17 @@
 from django.conf import settings
 from rest_framework import serializers
-from .models import Categoria, Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente
+
+from dashBoard.models.vista_trabajos_disponibles import VistaTrabajosDisponibles
+from .models import (
+    Categoria,
+    Usuario,
+    VistaPerfilCliente,
+    VistaReviewsCliente,
+    VistaHomeCliente,
+    VistaResumenGanancias,
+    VistaTrabajosAplicados,
+    VistaTrabajosDisponibles,
+)
 
 ROL_ID_TO_ROLE = {
     1: "client",
@@ -87,3 +98,40 @@ class HomeClienteSerializer(serializers.ModelSerializer):
     class Meta:
         model = VistaHomeCliente
         fields = '__all__'
+
+
+ 
+class DisponibilidadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Usuario
+        fields = ['disponible']
+ 
+ 
+class AreasTrabajoSerializer(serializers.Serializer):
+    categorias = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Categoria.objects.all()
+    )
+ 
+    def save(self, **kwargs):
+        usuario = self.context['request'].user
+        usuario.areas_trabajo.set(self.validated_data['categorias'])
+        return usuario
+ 
+ 
+class ResumenGananciasSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaResumenGanancias
+        fields = '__all__'
+ 
+ 
+class TrabajoAplicadoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaTrabajosAplicados
+        fields = '__all__'
+
+
+class TrabajoDisponibleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaTrabajosDisponibles
+        fields = '__all__'
+ 

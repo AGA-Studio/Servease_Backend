@@ -18,4 +18,9 @@ urlpatterns = [
     path('<uuid:id_usuario>/ultimas-publicaciones/', views.UltimasPublicacionesClienteView.as_view(), name='usuario-ultimas-publicaciones'),
     path('<uuid:id_usuario>/home/', views.HomeClienteView.as_view(), name='usuario-home-cliente'),
     path('<uuid:id_usuario>/mis-publicaciones/', views.MisPublicacionesView.as_view(), name='usuario-mis-publicaciones'),
+    path('disponibilidad/', views.DisponibilidadView.as_view(), name='usuario-disponibilidad'),
+    path('areas-trabajo/', views.AreasTrabajoView.as_view(), name='usuario-areas-trabajo'),
+    path('resumen-ganancias/', views.ResumenGananciasView.as_view(), name='usuario-resumen-ganancias'),
+    path('trabajos-aplicados/', views.TrabajosAplicadosView.as_view(), name='usuario-trabajos-aplicados'),
+    path('trabajos-disponibles/', views.TrabajosDisponiblesView.as_view(), name='trabajos-disponibles'),
 ]
