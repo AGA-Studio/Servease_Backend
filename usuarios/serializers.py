@@ -134,6 +134,20 @@ class TrabajoAplicadoSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class TrabajoAplicadoCardSerializer(serializers.ModelSerializer):
+    """Shape reducido para las cards de 'mis propuestas' del proveedor."""
+    presupuesto = serializers.DecimalField(
+        source='precio_final', max_digits=10, decimal_places=2
+    )
+
+    class Meta:
+        model = VistaTrabajosAplicados
+        fields = [
+            'id_postulacion', 'categoria', 'estado', 'titulo',
+            'tiempo_transcurrido', 'presupuesto', 'foto',
+        ]
+
+
 class TrabajoDisponibleSerializer(serializers.ModelSerializer):
     class Meta:
         model = VistaTrabajosDisponibles

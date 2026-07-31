@@ -41,6 +41,7 @@ from .serializers import (
     AreasTrabajoSerializer,
     ResumenGananciasSerializer,
     TrabajoAplicadoSerializer,
+    TrabajoAplicadoCardSerializer,
     TrabajoDisponibleSerializer,
 )
 from .storage import delete_profile_photos, upload_profile_photo
@@ -548,14 +549,30 @@ class ResumenGananciasView(RetrieveAPIView):
  
  
 class TrabajosAplicadosView(ListAPIView):
-    """Postulaciones hechas por el proveedor logueado."""
+    """
+    Postulaciones hechas por el proveedor logueado, en todos los estados.
+    Filtros opcionales via query params:
+      ?estado_id=1      (pendiente/contraoferta/rechazado/aceptado/finalizado)
+      ?categoria_id=1   (una de las categorias del proveedor)
+    """
     permission_classes = [IsAuthenticated, IsProviderRole]
     serializer_class = TrabajoAplicadoSerializer
- 
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['estado_id', 'categoria_id']
+
     def get_queryset(self):
         return VistaTrabajosAplicados.objects.filter(
             proveedor_id=self.request.user.id_usuario
         ).order_by('-id_postulacion')
+
+
+class TrabajosAplicadosCardsView(TrabajosAplicadosView):
+    """
+    Mismo listado que /trabajos-aplicados/ (mismos filtros), pero con el
+    shape reducido para las cards: categoria, estado, titulo, tiempo
+    transcurrido, presupuesto y una sola foto.
+    """
+    serializer_class = TrabajoAplicadoCardSerializer
 
 
 

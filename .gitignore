@@ -21,3 +21,6 @@ staticfiles/
 .env
 .env.local_pycache_/
 *.pyc
+
+# EndPoints
+API_ENDPOINTS.md

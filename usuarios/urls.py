@@ -24,5 +24,6 @@ urlpatterns = [
     path('areas-trabajo/', views.AreasTrabajoView.as_view(), name='usuario-areas-trabajo'),
     path('resumen-ganancias/', views.ResumenGananciasView.as_view(), name='usuario-resumen-ganancias'),
     path('trabajos-aplicados/', views.TrabajosAplicadosView.as_view(), name='usuario-trabajos-aplicados'),
+    path('trabajos-aplicados/cards/', views.TrabajosAplicadosCardsView.as_view(), name='usuario-trabajos-aplicados-cards'),
     path('trabajos-disponibles/', views.TrabajosDisponiblesView.as_view(), name='trabajos-disponibles'),
 ]
