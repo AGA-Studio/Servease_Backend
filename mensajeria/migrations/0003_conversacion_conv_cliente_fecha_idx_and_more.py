@@ -6,8 +6,8 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("mensajeria", "0002_alter_mensaje_options_remove_mensaje_receptor_and_more"),
-        ("servicios", "0002_vistainfoaplicantes_vistapostdetails"),
-        ("usuarios", "0003_vistahomecliente_mfabackupcode"),
+        ("servicios", "0001_initial"),
+        ("usuarios", "0001_initial"),
     ]
 
     operations = [

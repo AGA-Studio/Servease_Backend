@@ -7,7 +7,6 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("mensajeria", "0003_conversacion_conv_cliente_fecha_idx_and_more"),
-        ("usuarios", "0003_vistahomecliente_mfabackupcode"),
     ]
 
     operations = [

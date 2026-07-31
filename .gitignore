@@ -24,3 +24,12 @@ staticfiles/
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Tooling del agente / desarrollo local — NO trackear
+.omo/
+.opencode/
+.playwright-mcp/
+
+# Infra local no enviada al repo
+.env.example
+.dockerignore
