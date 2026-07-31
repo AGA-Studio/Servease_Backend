@@ -22,7 +22,7 @@ from servicios.serializers import ServicioListSerializer
 from servicios.models import Servicio
 from servicios.serializers import ServicioSerializer
 from .emails import send_confirmation_email
-from .models import Categoria, Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente,VistaResumenGanancias,VistaTrabajosAplicados,VistaTrabajosDisponibles
+from .models import Categoria, Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente, VistaResumenGanancias, VistaTrabajosAplicados, VistaTrabajosDisponibles, VistaUltimaResena
 from .permissions import IsAdminRole, IsClientRole
 from .serializers import (
     CategoriaSerializer,
@@ -38,6 +38,7 @@ from .serializers import (
     ResumenGananciasSerializer,
     TrabajoAplicadoSerializer,
     TrabajoDisponibleSerializer,
+    UltimaResenaSerializer,
 )
 from .storage import delete_profile_photos, upload_profile_photo
 from .supabase_admin import get_supabase_admin
@@ -500,3 +501,24 @@ class TrabajosDisponiblesView(ListAPIView):
             queryset = queryset.filter(precio_inicial__lte=precio_max)
  
         return queryset.order_by('-fecha')
+
+class ProveedorCategoriasView(APIView):
+    """Categorias (areas de trabajo) que ofrece un proveedor. Publico."""
+    permission_classes = [AllowAny]
+ 
+    def get(self, request, id_usuario):
+        usuario = get_object_or_404(Usuario, pk=id_usuario)
+        categorias = usuario.areas_trabajo.values('id_categoria', 'nombre')
+        return Response(list(categorias))
+ 
+ 
+class UltimasResenasView(ListAPIView):
+    """Ultimas 3 resenas recibidas por un usuario (cliente o proveedor). Publico."""
+    permission_classes = [AllowAny]
+    serializer_class = UltimaResenaSerializer
+ 
+    def get_queryset(self):
+        id_usuario = self.kwargs['id_usuario']
+        return VistaUltimaResena.objects.raw(
+            'SELECT * FROM ultimas_resenas(%s)', [str(id_usuario)]
+        )

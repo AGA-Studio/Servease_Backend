@@ -11,6 +11,7 @@ from .models import (
     VistaResumenGanancias,
     VistaTrabajosAplicados,
     VistaTrabajosDisponibles,
+    VistaUltimaResena,
 )
 
 ROL_ID_TO_ROLE = {
@@ -133,5 +134,10 @@ class TrabajoAplicadoSerializer(serializers.ModelSerializer):
 class TrabajoDisponibleSerializer(serializers.ModelSerializer):
     class Meta:
         model = VistaTrabajosDisponibles
+        fields = '__all__'
+
+class UltimaResenaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaUltimaResena
         fields = '__all__'
  

@@ -23,4 +23,6 @@ urlpatterns = [
     path('resumen-ganancias/', views.ResumenGananciasView.as_view(), name='usuario-resumen-ganancias'),
     path('trabajos-aplicados/', views.TrabajosAplicadosView.as_view(), name='usuario-trabajos-aplicados'),
     path('trabajos-disponibles/', views.TrabajosDisponiblesView.as_view(), name='trabajos-disponibles'),
+    path('<uuid:id_usuario>/categorias/', views.ProveedorCategoriasView.as_view(), name='usuario-categorias'),
+    path('<uuid:id_usuario>/ultimas-resenas/', views.UltimasResenasView.as_view(), name='usuario-ultimas-resenas'),
 ]
