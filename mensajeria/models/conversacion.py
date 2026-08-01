@@ -4,10 +4,7 @@ from django.db import models
 class Conversacion(models.Model):
     id_conversacion = models.AutoField(primary_key=True)
     fecha_inicio = models.DateTimeField(auto_now_add=True)
-    estado = models.ForeignKey(
-        'servicios.Estado', on_delete=models.PROTECT,
-        db_column='estado_id', related_name='conversaciones',
-    )
+    estado = models.ForeignKey('servicios.Estado', on_delete=models.PROTECT, related_name='conversaciones')
     servicio = models.ForeignKey('servicios.Servicio', on_delete=models.CASCADE, related_name='conversaciones')
     cliente = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='conversaciones_como_cliente')
     proveedor = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='conversaciones_como_proveedor')

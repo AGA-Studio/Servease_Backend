@@ -10,7 +10,7 @@ class Servicio(models.Model):
     latitud = models.DecimalField(max_digits=9, decimal_places=6)
     longitud = models.DecimalField(max_digits=9, decimal_places=6)
     fecha = models.DateTimeField(auto_now_add=True)
-    estado = models.CharField(max_length=50)
+    estado = models.ForeignKey('Estado', on_delete=models.PROTECT, related_name='servicios')
     imagenes = ArrayField(models.CharField(max_length=500), blank=True, default=list)
     fecha_final = models.DateTimeField(blank=True, null=True)
     tipo_cambio = models.ForeignKey(
@@ -19,7 +19,6 @@ class Servicio(models.Model):
         )
     cliente = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='servicios_solicitados')
     categoria = models.ForeignKey('usuarios.Categoria', on_delete=models.PROTECT, related_name='servicios')
-    
 
     class Meta:
         db_table = 'servicio'

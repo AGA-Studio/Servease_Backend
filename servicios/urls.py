@@ -30,4 +30,5 @@ urlpatterns = [
     path('<int:id_servicio>/pago/pendiente/', views.PagoPendienteView.as_view(), name='pago-pendiente'),
     path('<int:id_servicio>/pago/estado/', views.PagoEstadoView.as_view(), name='pago-estado'),
     path('webhook/stripe/', views.StripeWebhookView.as_view(), name='webhook-stripe'),
+    path('ofertas/crear/', views.OfertaCreateView.as_view(), name='oferta-create'),
 ]

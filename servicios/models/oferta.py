@@ -20,6 +20,7 @@ class Oferta(models.Model):
 
     class Meta:
         db_table = 'oferta'
-
+ 
     def __str__(self):
         return f"Oferta {self.id_oferta}"
+ 

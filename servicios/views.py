@@ -12,14 +12,11 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import ListAPIView, RetrieveAPIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
-from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
 
 from calificaciones.models import Calificacion
@@ -27,18 +24,22 @@ from mensajeria.models import Conversacion
 from transacciones.models import Transaccion
 from usuarios.permissions import IsClientRole, IsProviderRole
 from .models import Oferta, Postulacion, Servicio, VistaInfoAplicantes, VistaPostDetails
-from .models.estado import ABIERTO as ESTADO_ABIERTO
+from .models.estado import ABIERTO, CANCELADO, PENDIENTE
+
 from .serializers import (
     CalificarServicioSerializer,
     CompletarServicioSerializer,
     CreateServicioSerializer,
     InfoAplicanteSerializer,
     MisTrabajosSerializer,
+    OfertaSerializer,
     PostDetailsSerializer,
     ServicioListSerializer,
     ServicioSerializer,
     UpdateServicioSerializer,
+    CreateOfertaSerializer,
 )
+
 
 class ServicioCreateView(APIView):
     """Crea una nueva solicitud de servicio. Solo rol cliente."""
@@ -66,7 +67,7 @@ class ServicioEditView(APIView):
 
         if servicio.cliente_id != request.user.id_usuario:
             raise PermissionDenied('No puedes editar un servicio que no es tuyo.')
-        if servicio.estado != 'abierto':
+        if servicio.estado_id != ABIERTO:
             raise PermissionDenied(
                 'Solo puedes editar publicaciones que sigan abiertas.'
             )
@@ -77,7 +78,8 @@ class ServicioEditView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(ServicioSerializer(servicio).data)
-    
+
+
 class ServicioDeleteView(APIView):
     """Cancela una publicacion (borrado logico). Solo el cliente dueño, y solo si sigue 'abierto'."""
     permission_classes = [IsAuthenticated, IsClientRole]
@@ -87,17 +89,19 @@ class ServicioDeleteView(APIView):
 
         if servicio.cliente_id != request.user.id_usuario:
             raise PermissionDenied('No puedes eliminar un servicio que no es tuyo.')
-        if servicio.estado != 'abierto':
+        if servicio.estado_id != ABIERTO:
             raise PermissionDenied(
                 'Solo puedes eliminar publicaciones que sigan abiertas.'
             )
 
-        servicio.estado = 'cancelado'
-        servicio.save(update_fields=['estado'])
+        servicio.estado_id = CANCELADO
+        servicio.save(update_fields=['estado_id'])
         return Response(
             {'detail': 'La publicación se canceló correctamente.'},
             status=status.HTTP_200_OK,
         )
+
+
 class PostDetailsView(RetrieveAPIView):
     """Detalle de un servicio publicado, con la info del cliente que lo pidió."""
     permission_classes = [IsAuthenticated]
@@ -143,7 +147,7 @@ class ServicioListView(ListAPIView):
     """Catalogo publico de servicios, filtrable por categoria y estado."""
     permission_classes = [AllowAny]
     serializer_class = ServicioListSerializer
-    queryset = Servicio.objects.exclude(estado='cancelado').order_by('-fecha')
+    queryset = Servicio.objects.exclude(estado_id=CANCELADO).order_by('-fecha')
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['categoria_id', 'estado']
 
@@ -183,7 +187,7 @@ class AceptarPostulacionView(APIView):
                 servicio_id=postulacion.servicio_id,
                 cliente_id=postulacion.servicio.cliente_id,
                 proveedor_id=postulacion.proveedor_id,
-                defaults={'estado_id': ESTADO_ABIERTO},
+                defaults={'estado_id': ABIERTO},
             )
 
         return Response(
@@ -819,3 +823,14 @@ class StripeWebhookView(View):
                 ).update(estado='rechazada')
 
         return HttpResponse(status=200)
+class OfertaCreateView(APIView):
+    """Envia una oferta/contraoferta. Solo cliente dueño o proveedor de la postulacion."""
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'oferta-create'
+
+    def post(self, request):
+        serializer = CreateOfertaSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        oferta = serializer.save()
+        return Response(OfertaSerializer(oferta).data, status=status.HTTP_201_CREATED)

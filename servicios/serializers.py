@@ -4,7 +4,8 @@ from django.conf import settings
 from rest_framework import serializers
 
 from usuarios.models import Categoria
-from .models import Postulacion, Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails
+from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado
+from .models.estado import ABIERTO, CANCELADO, PENDIENTE
 
 # Bounding box del área urbana de Tijuana (excluye Tecate, Rosarito, Ensenada).
 # Es un rectángulo aproximado, no el polígono real del municipio.
@@ -20,14 +21,16 @@ class ServicioSerializer(serializers.ModelSerializer):
     id_categoria = serializers.IntegerField(source='categoria_id')
     id_tipo_cambio = serializers.IntegerField(source='tipo_cambio_id', allow_null=True)
     tipo_cambio_nombre = serializers.SerializerMethodField()
+    id_estado = serializers.IntegerField(source='estado_id')
+    estado_descripcion = serializers.CharField(source='estado.descripcion', read_only=True)
 
     class Meta:
         model = Servicio
         fields = [
             'id_servicio', 'titulo', 'descripcion', 'precio_inicial',
-            'latitud', 'longitud', 'fecha', 'estado', 'imagenes',
-            'fecha_final', 'id_cliente', 'id_categoria', 'id_tipo_cambio',
-            'tipo_cambio_nombre',
+            'latitud', 'longitud', 'fecha', 'id_estado', 'estado_descripcion',
+            'imagenes', 'fecha_final', 'id_cliente', 'id_categoria',
+            'id_tipo_cambio', 'tipo_cambio_nombre',
         ]
 
     def get_tipo_cambio_nombre(self, obj):
@@ -90,7 +93,7 @@ class CreateServicioSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data['cliente'] = self.context['request'].user
-        validated_data['estado'] = 'abierto'
+        validated_data['estado_id'] = ABIERTO
         return Servicio.objects.create(**validated_data)
 
 
@@ -142,7 +145,7 @@ class UpdateServicioSerializer(serializers.ModelSerializer):
                     'bucket de imágenes de servicios.'
                 )
         return value
-    
+
 
 
 
@@ -161,13 +164,14 @@ class PostDetailsSerializer(serializers.ModelSerializer):
 class ServicioListSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     tipo_cambio_nombre = serializers.SerializerMethodField()
+    estado_descripcion = serializers.CharField(source='estado.descripcion', read_only=True)
 
     class Meta:
         model = Servicio
         fields = [
             'id_servicio', 'titulo', 'precio_inicial', 'latitud',
-            'longitud', 'fecha', 'estado', 'imagenes', 'categoria_nombre',
-            'tipo_cambio_nombre',
+            'longitud', 'fecha', 'estado_descripcion', 'imagenes',
+            'categoria_nombre', 'tipo_cambio_nombre',
         ]
 
     def get_tipo_cambio_nombre(self, obj):
@@ -212,3 +216,47 @@ class MisTrabajosSerializer(serializers.ModelSerializer):
 
     def get_moneda(self, obj):
         return obj.servicio.tipo_cambio.nombre if obj.servicio.tipo_cambio_id else 'MXN'
+
+
+# Oferta y postulacion
+
+class OfertaSerializer(serializers.ModelSerializer):
+    id_postulacion = serializers.IntegerField(source='postulacion_id')
+    emisor_id = serializers.UUIDField()
+    id_estado = serializers.IntegerField(source='estado_id')
+    estado_descripcion = serializers.CharField(source='estado.descripcion', read_only=True)
+
+    class Meta:
+        model = Oferta
+        fields = [
+            'id_oferta', 'aceptacion', 'monto', 'fecha', 'id_estado',
+            'estado_descripcion', 'comentario', 'id_postulacion', 'emisor_id',
+        ]
+
+
+class CreateOfertaSerializer(serializers.ModelSerializer):
+    id_postulacion = serializers.PrimaryKeyRelatedField(
+        source='postulacion', queryset=Postulacion.objects.all()
+    )
+    monto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1)
+
+    class Meta:
+        model = Oferta
+        fields = ['id_postulacion', 'monto', 'comentario']
+
+    def validate(self, attrs):
+        postulacion = attrs['postulacion']
+        usuario = self.context['request'].user
+        cliente_id = postulacion.servicio.cliente_id
+        proveedor_id = postulacion.proveedor_id
+        if usuario.id_usuario not in (cliente_id, proveedor_id):
+            raise serializers.ValidationError(
+                'No puedes enviar una oferta en una postulación que no te pertenece.'
+            )
+        return attrs
+
+    def create(self, validated_data):
+        validated_data['emisor'] = self.context['request'].user
+        validated_data['estado_id'] = PENDIENTE
+        validated_data['aceptacion'] = False
+        return Oferta.objects.create(**validated_data)

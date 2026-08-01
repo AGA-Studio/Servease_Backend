@@ -8,5 +8,5 @@ from .estado import Estado
 
 __all__ = [
     'TipoCambio', 'Servicio', 'Postulacion', 'Oferta',
-    'VistaInfoAplicantes', 'VistaPostDetails', 'Estado',
+    'VistaInfoAplicantes', 'VistaPostDetails', 'Estado'
 ]
