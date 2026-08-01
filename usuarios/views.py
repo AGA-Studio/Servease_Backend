@@ -6,10 +6,11 @@ import secrets
 import requests
 from django.conf import settings
 from django.core import signing
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -25,7 +26,7 @@ from servicios.serializers import ServicioListSerializer
 from servicios.models import Servicio
 from servicios.serializers import ServicioSerializer
 from .emails import send_confirmation_email
-from .models import Categoria, Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente, MfaBackupCode
+from .models import Categoria, Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente,VistaResumenGanancias,VistaTrabajosAplicados,VistaTrabajosDisponibles
 from .permissions import IsAdminRole, IsClientRole
 from .serializers import (
     CategoriaSerializer,
@@ -36,10 +37,18 @@ from .serializers import (
     UpdateProfilePhotoSerializer,
     UpdatePersonalInfoSerializer,
     UsuarioSerializer,
+    DisponibilidadSerializer,
+    AreasTrabajoSerializer,
+    ResumenGananciasSerializer,
+    TrabajoAplicadoSerializer,
+    TrabajoAplicadoCardSerializer,
+    TrabajoDisponibleSerializer,
 )
 from .storage import delete_profile_photos, upload_profile_photo
 from .supabase_admin import get_supabase_admin
 from .tokens import make_confirmation_token, verify_confirmation_token
+
+from .permissions import IsProviderRole  # ver  si es correcto
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +109,8 @@ class UpdatePersonalInfoView(APIView):
 class RequestPasswordResetView(APIView):
     """Dispara el correo de restablecimiento de contraseña de Supabase."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password-reset'
 
     def post(self, request):
         url = f"{settings.SUPABASE_URL}/auth/v1/recover"
@@ -125,6 +136,8 @@ class RequestPasswordResetView(APIView):
 class MfaEnrollView(APIView):
     """Inicia el registro de 2FA (TOTP): regresa QR/secret."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-enroll'
 
     def post(self, request):
         url = f"{settings.SUPABASE_URL}/auth/v1/factors"
@@ -151,6 +164,8 @@ class MfaEnrollView(APIView):
 class MfaChallengeView(APIView):
     """Crea el challenge para verificar el factor recién registrado."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-challenge'
 
     def post(self, request, factor_id):
         url = f"{settings.SUPABASE_URL}/auth/v1/factors/{factor_id}/challenge"
@@ -173,6 +188,8 @@ class MfaChallengeView(APIView):
 class MfaVerifyView(APIView):
     """Verifica el código TOTP ingresado por el usuario."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-verify'
 
     def post(self, request, factor_id):
         code = request.data.get('code')
@@ -486,3 +503,104 @@ class MisPublicacionesView(ListAPIView):
                 'No puedes ver las publicaciones de otro usuario.'
             )
         return Servicio.objects.filter(cliente_id=id_usuario).order_by('-fecha')
+
+
+class DisponibilidadView(APIView):
+    """Ver/cambiar el estado 'disponible para trabajar'. Solo proveedores."""
+    permission_classes = [IsAuthenticated, IsProviderRole]
+ 
+    def get(self, request):
+        return Response(DisponibilidadSerializer(request.user).data)
+ 
+    def patch(self, request):
+        serializer = DisponibilidadSerializer(
+            request.user, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+ 
+ 
+class AreasTrabajoView(APIView):
+    """Ver/definir las categorias en las que trabaja el proveedor."""
+    permission_classes = [IsAuthenticated, IsProviderRole]
+ 
+    def get(self, request):
+        categorias = request.user.areas_trabajo.values('id_categoria', 'nombre')
+        return Response(list(categorias))
+ 
+    def put(self, request):
+        serializer = AreasTrabajoSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        categorias = request.user.areas_trabajo.values('id_categoria', 'nombre')
+        return Response(list(categorias))
+ 
+ 
+class ResumenGananciasView(RetrieveAPIView):
+    """Resumen de ganancias del proveedor logueado."""
+    permission_classes = [IsAuthenticated, IsProviderRole]
+    serializer_class = ResumenGananciasSerializer
+ 
+    def get_object(self):
+        return get_object_or_404(
+            VistaResumenGanancias, proveedor_id=self.request.user.id_usuario
+        )
+ 
+ 
+class TrabajosAplicadosView(ListAPIView):
+    """
+    Postulaciones hechas por el proveedor logueado, en todos los estados.
+    Filtros opcionales via query params:
+      ?estado_id=1      (pendiente/contraoferta/rechazado/aceptado/finalizado)
+      ?categoria_id=1   (una de las categorias del proveedor)
+    """
+    permission_classes = [IsAuthenticated, IsProviderRole]
+    serializer_class = TrabajoAplicadoSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['estado_id', 'categoria_id']
+
+    def get_queryset(self):
+        return VistaTrabajosAplicados.objects.filter(
+            proveedor_id=self.request.user.id_usuario
+        ).order_by('-id_postulacion')
+
+
+class TrabajosAplicadosCardsView(TrabajosAplicadosView):
+    """
+    Mismo listado que /trabajos-aplicados/ (mismos filtros), pero con el
+    shape reducido para las cards: categoria, estado, titulo, tiempo
+    transcurrido, presupuesto y una sola foto.
+    """
+    serializer_class = TrabajoAplicadoCardSerializer
+
+
+
+class TrabajosDisponiblesView(ListAPIView):
+    """
+    Trabajos disponibles para el proveedor logueado, filtrados por
+    sus areas de trabajo. Filtros opcionales via query params:
+      ?categoria_id=1        (una categoria especifica dentro de sus areas)
+      ?precio_min=100
+      ?precio_max=500
+    """
+    permission_classes = [IsAuthenticated, IsProviderRole]
+    serializer_class = TrabajoDisponibleSerializer
+ 
+    def get_queryset(self):
+        areas = self.request.user.areas_trabajo.values_list('id_categoria', flat=True)
+        queryset = VistaTrabajosDisponibles.objects.filter(categoria_id__in=areas)
+ 
+        categoria_id = self.request.query_params.get('categoria_id')
+        if categoria_id:
+            queryset = queryset.filter(categoria_id=categoria_id)
+ 
+        precio_min = self.request.query_params.get('precio_min')
+        if precio_min:
+            queryset = queryset.filter(precio_inicial__gte=precio_min)
+ 
+        precio_max = self.request.query_params.get('precio_max')
+        if precio_max:
+            queryset = queryset.filter(precio_inicial__lte=precio_max)
+ 
+        return queryset.order_by('-fecha')

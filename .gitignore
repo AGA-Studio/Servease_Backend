@@ -4,7 +4,7 @@ env/
 ENV/
 
 # Python
-__pycache__/
+_pycache_/
 *.py[cod]
 *$py.class
 *.so
@@ -19,8 +19,8 @@ staticfiles/
 
 # Variables de entorno
 .env
-.env.local
+.env.local_pycache_/
+*.pyc
 
-# macOS
-.DS_Store
-**/.DS_Store
+# EndPoints
+API_ENDPOINTS.md

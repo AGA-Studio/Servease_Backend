@@ -31,6 +31,7 @@ INSTALLED_APPS = [
 
     'usuarios',
     'servicios',
+    'dashBoard',
     'mensajeria',
     'transacciones',
     'calificaciones',
@@ -130,14 +131,28 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_THROTTLE_CLASSES': [
+        # anon/user: piso parejo para TODA la API, incluso vistas sin
+        # throttle_scope propio (ScopedRateThrottle sola no las cubre).
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
         'signup': '5/hour',
         'confirm-email': '20/hour',
         'servicio-create': '20/hour',
+        'servicio-completar': '20/hour',
+        'servicio-calificar': '20/hour',
+        'pago-iniciar': '20/hour',
+        'oferta-create': '20/hour',
         'mfa-backup-generate': '10/hour',
         'mfa-backup-verify': '15/hour',
+        'password-reset': '5/hour',
+        'mfa-enroll': '10/hour',
+        'mfa-challenge': '20/hour',
+        'mfa-verify': '20/hour',
     },
 }
 
@@ -156,3 +171,9 @@ RESEND_FROM_EMAIL = config('RESEND_FROM_EMAIL', default='no-reply@servease.com')
 
 # Base URL of the frontend, used to build links inside emails.
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# Stripe: secret key nunca se expone al frontend. Webhook secret valida que
+# los eventos vengan realmente de Stripe (firma), no de cualquiera pegandole
+# al endpoint del webhook.
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')

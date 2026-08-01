@@ -40,3 +40,21 @@ class Usuario(models.Model):
 
     def __str__(self):
         return f"{self.nombre} {self.apellido_pa}"
+
+    
+    ##Relación muchos a muchos con Categoria a través de UsuarioAreaTrabajo
+    ##Revisar si es correccto
+    disponible = models.BooleanField(default=True)
+    areas_trabajo = models.ManyToManyField(
+        'usuarios.Categoria', through='UsuarioAreaTrabajo',
+        related_name='proveedores_area', blank=True
+    )
+
+class UsuarioAreaTrabajo(models.Model):
+    usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE)
+    categoria = models.ForeignKey('usuarios.Categoria', on_delete=models.CASCADE)
+
+    class Meta:
+        managed = False
+        db_table = 'usuario_area_trabajo'
+        unique_together = ('usuario', 'categoria')
