@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import stripe
 from django.conf import settings
 from django.db import transaction
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -33,6 +33,7 @@ from .serializers import (
     CompletarServicioSerializer,
     CreateServicioSerializer,
     InfoAplicanteSerializer,
+    MisTrabajosSerializer,
     PostDetailsSerializer,
     ServicioListSerializer,
     ServicioSerializer,
@@ -104,6 +105,23 @@ class PostDetailsView(RetrieveAPIView):
     queryset = VistaPostDetails.objects.all()
     lookup_field = 'id_servicio'
     lookup_url_kwarg = 'id_servicio'
+
+
+class MisTrabajosView(ListAPIView):
+    """Postulaciones activas (pendientes o aceptadas) del proveedor autenticado."""
+    permission_classes = [IsAuthenticated, IsProviderRole]
+    serializer_class = MisTrabajosSerializer
+
+    def get_queryset(self):
+        return (
+            Postulacion.objects
+            .filter(
+                proveedor_id=self.request.user.id_usuario,
+                estado__in=['pendiente', 'aceptada'],
+            )
+            .select_related('servicio', 'servicio__categoria', 'servicio__tipo_cambio')
+            .order_by('-fecha')
+        )
 
 
 class InfoAplicantesView(ListAPIView):
@@ -438,6 +456,50 @@ class CalificarServicioView(APIView):
         )
 
 
+class PendienteCalificarView(APIView):
+    """
+    Servicio completado más reciente que el cliente autenticado aún no ha
+    calificado. Se usa al cargar la app para no depender solo de Realtime
+    (si el cliente entra después de que el proveedor ya completó el
+    servicio, Realtime no dispara ningún evento nuevo que capturar).
+    """
+    permission_classes = [IsAuthenticated, IsClientRole]
+
+    def get(self, request):
+        calificados_ids = Calificacion.objects.filter(
+            evaluador_id=request.user.id_usuario
+        ).values_list('servicio_id', flat=True)
+
+        servicio = (
+            Servicio.objects
+            .filter(cliente_id=request.user.id_usuario, estado='completado')
+            .exclude(id_servicio__in=calificados_ids)
+            .order_by('-fecha')
+            .first()
+        )
+        if servicio is None:
+            return Response(None, status=status.HTTP_200_OK)
+
+        postulacion = (
+            Postulacion.objects
+            .filter(servicio_id=servicio.id_servicio, estado='aceptada')
+            .select_related('proveedor')
+            .first()
+        )
+
+        return Response({
+            'id_servicio': servicio.id_servicio,
+            'titulo': servicio.titulo,
+            'proveedor_nombre': (
+                f"{postulacion.proveedor.nombre} {postulacion.proveedor.apellido_pa}"
+                if postulacion else ''
+            ),
+            'proveedor_foto': (
+                postulacion.proveedor.url_foto_perfil if postulacion else None
+            ),
+        })
+
+
 class IniciarPagoView(APIView):
     """Inicia un cobro con tarjeta. Solo el proveedor asignado, y solo si el servicio está en progreso."""
     permission_classes = [IsAuthenticated, IsProviderRole]
@@ -521,6 +583,197 @@ class IniciarPagoView(APIView):
         )
 
 
+class PagoPendienteView(APIView):
+    """
+    Devuelve el client_secret del cobro con tarjeta pendiente de un servicio,
+    para que el cliente pueda confirmarlo con Stripe Elements. Solo el
+    cliente dueño del servicio. El client_secret nunca se guarda en la BD,
+    se recupera de Stripe en cada llamada.
+    """
+    permission_classes = [IsAuthenticated, IsClientRole]
+
+    def get(self, request, id_servicio):
+        servicio = get_object_or_404(Servicio, pk=id_servicio)
+        if servicio.cliente_id != request.user.id_usuario:
+            raise PermissionDenied(
+                'No puedes ver el pago de un servicio que no es tuyo.'
+            )
+
+        transaccion = Transaccion.objects.filter(
+            servicio_id=id_servicio, cliente_id=request.user.id_usuario,
+            metodo_pago='tarjeta', estado='pendiente',
+        ).order_by('-fecha').first()
+        if transaccion is None:
+            raise Http404(
+                'No hay un cobro con tarjeta pendiente para este servicio.'
+            )
+
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        try:
+            intent = stripe.PaymentIntent.retrieve(
+                transaccion.stripe_payment_intent_id
+            )
+        except stripe.error.StripeError:
+            return Response(
+                {'detail': 'No se pudo obtener el cobro con el proveedor de pagos.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response({
+            'id_transaccion': transaccion.id_transaccion,
+            'monto': transaccion.monto,
+            'client_secret': intent.client_secret,
+        })
+
+
+class PagoPendienteClienteView(APIView):
+    """
+    Cobro con tarjeta pendiente (o recién rechazado, pero aún retomable) más
+    reciente del cliente autenticado, sin necesidad de conocer el
+    id_servicio de antemano. Se usa al cargar la app para no depender solo
+    de Realtime (si el proveedor inicia el cobro antes de que el cliente
+    esté conectado, el INSERT ya pasó y no hay evento que capturar al
+    reconectarse). Un rechazo previo no es terminal — el mismo intent sigue
+    aceptando otra tarjeta, así que también se retoma.
+    """
+    permission_classes = [IsAuthenticated, IsClientRole]
+
+    def get(self, request):
+        transaccion = (
+            Transaccion.objects
+            .filter(
+                cliente_id=request.user.id_usuario,
+                metodo_pago='tarjeta', estado__in=['pendiente', 'rechazada'],
+            )
+            .select_related('servicio')
+            .order_by('-fecha')
+            .first()
+        )
+        if transaccion is None:
+            return Response(None, status=status.HTTP_200_OK)
+
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        try:
+            intent = stripe.PaymentIntent.retrieve(
+                transaccion.stripe_payment_intent_id
+            )
+        except stripe.error.StripeError:
+            return Response(
+                {'detail': 'No se pudo obtener el cobro con el proveedor de pagos.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response({
+            'id_servicio': transaccion.servicio_id,
+            'titulo': transaccion.servicio.titulo,
+            'id_transaccion': transaccion.id_transaccion,
+            'monto': transaccion.monto,
+            'client_secret': intent.client_secret,
+        })
+
+
+class CancelarPagoView(APIView):
+    """
+    El proveedor cancela un cobro con tarjeta que sigue pendiente (mientras
+    espera a que el cliente pague). Cancela el PaymentIntent en Stripe y
+    marca la transacción como 'cancelada'; el cliente se entera vía Realtime
+    (UPDATE en transaccion) si tenía el modal de pago abierto.
+    """
+    permission_classes = [IsAuthenticated, IsProviderRole]
+
+    def post(self, request, id_transaccion):
+        transaccion = get_object_or_404(Transaccion, pk=id_transaccion)
+
+        if transaccion.proveedor_id != request.user.id_usuario:
+            raise PermissionDenied(
+                'No puedes cancelar un cobro que no es tuyo.'
+            )
+        if transaccion.metodo_pago != 'tarjeta' or transaccion.estado != 'pendiente':
+            raise PermissionDenied(
+                'Solo puedes cancelar un cobro con tarjeta que siga pendiente.'
+            )
+
+        if transaccion.stripe_payment_intent_id:
+            stripe.api_key = settings.STRIPE_SECRET_KEY
+            try:
+                stripe.PaymentIntent.cancel(transaccion.stripe_payment_intent_id)
+            except stripe.error.StripeError:
+                pass
+
+        transaccion.estado = 'cancelada'
+        transaccion.save(update_fields=['estado'])
+
+        return Response(
+            {'detail': 'El cobro se canceló correctamente.'},
+            status=status.HTTP_200_OK,
+        )
+
+
+class PagoEstadoView(APIView):
+    """
+    Estado real del cobro con tarjeta más reciente de un servicio, para el
+    proveedor asignado. Se consulta al reabrir el flujo de completar
+    servicio para no depender solo de Realtime: si el proveedor recargó la
+    página o navegó fuera mientras esperaba, pierde la suscripción en vivo y
+    de otra forma se quedaría esperando un evento que ya pasó.
+    """
+    permission_classes = [IsAuthenticated, IsProviderRole]
+
+    def get(self, request, id_servicio):
+        postulacion = Postulacion.objects.filter(
+            servicio_id=id_servicio,
+            proveedor_id=request.user.id_usuario,
+            estado='aceptada',
+        ).first()
+        if postulacion is None:
+            raise PermissionDenied(
+                'No eres el proveedor asignado a este servicio.'
+            )
+
+        transaccion = (
+            Transaccion.objects
+            .filter(servicio_id=id_servicio, metodo_pago='tarjeta')
+            .order_by('-fecha')
+            .first()
+        )
+        if transaccion is None:
+            return Response(None, status=status.HTTP_200_OK)
+
+        return Response({
+            'id_transaccion': transaccion.id_transaccion,
+            'estado': transaccion.estado,
+        })
+
+
+class PagoEnCursoProveedorView(APIView):
+    """
+    Cobro con tarjeta en curso (o recién resuelto) más reciente del
+    proveedor autenticado, sin necesitar saber el id_servicio de antemano.
+    Se usa al cargar "Mis Trabajos" para retomar el modal de espera o de
+    calificación automáticamente si el proveedor cerró la pestaña o
+    navegó fuera mientras esperaba.
+    """
+    permission_classes = [IsAuthenticated, IsProviderRole]
+
+    def get(self, request):
+        transaccion = (
+            Transaccion.objects
+            .filter(proveedor_id=request.user.id_usuario, metodo_pago='tarjeta')
+            .exclude(servicio__estado='completado')
+            .select_related('servicio')
+            .order_by('-fecha')
+            .first()
+        )
+        if transaccion is None:
+            return Response(None, status=status.HTTP_200_OK)
+
+        return Response({
+            'id_servicio': transaccion.servicio_id,
+            'id_transaccion': transaccion.id_transaccion,
+            'estado': transaccion.estado,
+        })
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class StripeWebhookView(View):
     """
@@ -546,13 +799,23 @@ class StripeWebhookView(View):
             return HttpResponse(status=200)
 
         intent = event['data']['object']
-        nuevo_estado = (
-            'completada' if event_type == 'payment_intent.succeeded' else 'rechazada'
-        )
 
         with transaction.atomic():
-            Transaccion.objects.select_for_update().filter(
-                stripe_payment_intent_id=intent['id'], estado='pendiente',
-            ).update(estado=nuevo_estado)
+            if event_type == 'payment_intent.succeeded':
+                # El intent puede haber sido reintentado tras uno o varios
+                # rechazos previos (Stripe permite confirmar el mismo intent
+                # con otra tarjeta cuantas veces haga falta), así que el
+                # éxito manda sin importar el estado local actual.
+                Transaccion.objects.select_for_update().filter(
+                    stripe_payment_intent_id=intent['id'],
+                ).exclude(estado='completada').update(estado='completada')
+            else:
+                # Un rechazo NO es terminal: el intent sigue vivo y el
+                # cliente puede reintentar con otra tarjeta en el mismo
+                # formulario. El proveedor no se entera de esto — solo le
+                # importa el resultado final (éxito o expiración real).
+                Transaccion.objects.select_for_update().filter(
+                    stripe_payment_intent_id=intent['id'], estado='pendiente',
+                ).update(estado='rechazada')
 
         return HttpResponse(status=200)
