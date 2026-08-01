@@ -1,0 +1,218 @@
+x-common-env: &common-env
+  SECRET_KEY: django-insecure-fl%h#c-y-l@6flw!iux_h%ogm0w70p99hhp%b-4!s@1w(oqp7d
+  DEBUG: "True"
+  ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+  DB_NAME: servease_dev
+  DB_USER: servease_dev
+  DB_PASSWORD: servease_dev
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  REDIS_URL: "redis://redis:6379/0"
+  SUPABASE_URL: "http://supabase-kong:8000"
+  SUPABASE_JWKS_URL: "http://supabase-kong:8000/auth/v1/.well-known/jwks.json"
+  SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY}}"
+  SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-${SUPABASE_SERVICE_ROLE_KEY}}"
+  FRONTEND_URL: "http://localhost:5173"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: servease_dev
+      POSTGRES_USER: servease_dev
+      POSTGRES_PASSWORD: servease_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U servease_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Supabase local stack (official images)
+  supabase-db:
+    image: supabase/postgres:17.0.0
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "54322:5432"
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  supabase-kong:
+    image: kong:3.4
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,correlation-id
+    ports:
+      - "54321:8000"
+      - "54323:8001"
+    volumes:
+      - ./supabase/kong.yml:/kong/kong.yml:ro
+    depends_on:
+      - supabase-db
+      - supabase-auth
+      - supabase-rest
+      - supabase-realtime
+      - supabase-storage
+      - supabase-meta
+      - supabase-studio
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  supabase-auth:
+    image: supabase/gotrue:v2.151.0
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:postgres@supabase-db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: "*"
+      GOTRUE_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_DISABLE_SIGNUP: "false"
+      API_EXTERNAL_URL: http://localhost:54321
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9999/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  supabase-rest:
+    image: postgrest/postgrest:v12.2.0
+    environment:
+      PGRST_DB_URI: postgres://postgres:postgres@supabase-db:5432/postgres
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  supabase-realtime:
+    image: supabase/realtime:v2.26.10
+    environment:
+      PORT: 4000
+      DB_HOST: supabase-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+      JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+      SECRET_KEY_BASE: secret-key-base-for-realtime
+      ERL_AFLAGS: "-proto_dist inet_tcp"
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  supabase-storage:
+    image: supabase/storage-api:v1.11.4
+    environment:
+      ANON_KEY: ${SUPABASE_ANON_KEY}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://supabase-rest:3000
+      PGRST_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: local
+      LOCAL_STORAGE_DIR: /var/lib/storage
+    volumes:
+      - supabase-storage-data:/var/lib/storage
+    depends_on:
+      - supabase-rest
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  supabase-meta:
+    image: supabase/postgres-meta:v0.82.0
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: postgres
+      PG_META_DB_NAME: postgres
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+
+  supabase-studio:
+    image: supabase/studio:20241216-8c8b8e6
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      DEFAULT_PROJECT: supabase
+      SUPABASE_URL: http://supabase-kong:8000
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+    ports:
+      - "54323:3000"
+    depends_on:
+      - supabase-meta
+      - supabase-kong
+
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment: *common-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      supabase-kong:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: >
+      sh -c "
+        python manage.py migrate --noinput &&
+        python manage.py collectstatic --noinput &&
+        uvicorn Servease_Backend.asgi:application --host 0.0.0.0 --port 8000 --reload
+      "
+
+volumes:
+  pgdata:
+  supabase-db-data:
+  supabase-storage-data:
