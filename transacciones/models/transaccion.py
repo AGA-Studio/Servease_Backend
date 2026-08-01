@@ -7,6 +7,14 @@ class Transaccion(models.Model):
     comision = models.DecimalField(max_digits=10, decimal_places=2)
     fecha = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=50)
+    metodo_pago = models.CharField(
+        max_length=20,
+        choices=[('tarjeta', 'Tarjeta'), ('efectivo', 'Efectivo')],
+        null=True, blank=True,
+    )
+    stripe_payment_intent_id = models.CharField(
+        max_length=255, null=True, blank=True, unique=True
+    )
     servicio = models.ForeignKey('servicios.Servicio', on_delete=models.CASCADE, related_name='transacciones')
     proveedor = models.ForeignKey('usuarios.Usuario', on_delete=models.PROTECT, related_name='transacciones_como_proveedor')
     cliente = models.ForeignKey('usuarios.Usuario', on_delete=models.PROTECT, related_name='transacciones_como_cliente')

@@ -136,6 +136,9 @@ REST_FRAMEWORK = {
         'signup': '5/hour',
         'confirm-email': '20/hour',
         'servicio-create': '20/hour',
+        'servicio-completar': '20/hour',
+        'servicio-calificar': '20/hour',
+        'pago-iniciar': '20/hour',
         'mfa-backup-generate': '10/hour',
         'mfa-backup-verify': '15/hour',
     },
@@ -156,3 +159,9 @@ RESEND_FROM_EMAIL = config('RESEND_FROM_EMAIL', default='no-reply@servease.com')
 
 # Base URL of the frontend, used to build links inside emails.
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# Stripe: secret key nunca se expone al frontend. Webhook secret valida que
+# los eventos vengan realmente de Stripe (firma), no de cualquiera pegandole
+# al endpoint del webhook.
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
