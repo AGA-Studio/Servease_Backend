@@ -88,4 +88,27 @@ class Migration(migrations.Migration):
                 'db_table': 'sucursal',
             },
         ),
+        migrations.RunSQL(
+            sql="""
+            CREATE TABLE IF NOT EXISTS usuario (
+                id_usuario uuid NOT NULL,
+                nombre varchar(100) NOT NULL,
+                segundo_nombre varchar(100) NULL,
+                apellido_pa varchar(100) NOT NULL,
+                apellido_ma varchar(100) NULL,
+                correo varchar(254) NOT NULL,
+                celular varchar(20) NULL,
+                url_foto_perfil varchar(200) NULL,
+                descripcion_perfil text NULL,
+                fecha_registro timestamptz NOT NULL DEFAULT now(),
+                estado boolean NOT NULL DEFAULT true,
+                id_rol integer NOT NULL,
+                id_categoria integer NULL,
+                id_empresa integer NULL,
+                CONSTRAINT usuario_pkey PRIMARY KEY (id_usuario),
+                CONSTRAINT usuario_correo_key UNIQUE (correo)
+            );
+            """,
+            reverse_sql="DROP TABLE IF EXISTS usuario CASCADE;",
+        ),
     ]
