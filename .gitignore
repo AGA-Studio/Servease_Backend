@@ -23,4 +23,5 @@ staticfiles/
 *.pyc
 
 # EndPoints
-API_ENDPOINTS.md
+#API_ENDPOINTS.md
+api.md
