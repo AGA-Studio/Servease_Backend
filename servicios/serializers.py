@@ -4,7 +4,7 @@ from django.conf import settings
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from usuarios.models import Categoria
-from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado
+from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado,VistaConversaciones  
 from .models.estado import ABIERTO, CANCELADO, PENDIENTE
 
 # Bounding box del área urbana de Tijuana (excluye Tecate, Rosarito, Ensenada).
@@ -252,3 +252,24 @@ class CreatePostulacionSerializer(serializers.ModelSerializer):
         validated_data['servicio'] = self.context['servicio']
         validated_data['estado_id'] = PENDIENTE
         return Postulacion.objects.create(**validated_data)
+
+    
+#conversaciones
+class ConversacionSerializer(serializers.ModelSerializer):
+    no_leidos = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = VistaConversaciones
+        fields = [
+            'id_conversacion', 'fecha_inicio', 'estado', 'servicio_id', 'servicio_titulo',
+            'cliente_id', 'nombre_cliente', 'foto_cliente',
+            'proveedor_id', 'nombre_proveedor', 'foto_proveedor',
+            'ultimo_mensaje', 'fecha_ultimo_mensaje', 'no_leidos',
+        ]
+ 
+    def get_no_leidos(self, obj):
+        usuario_id = self.context['request'].user.id_usuario
+        if usuario_id == obj.cliente_id:
+            return obj.no_leidos_cliente
+        return obj.no_leidos_proveedor
+ 

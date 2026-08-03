@@ -6,11 +6,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q  
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.exceptions import ValidationError
 from usuarios.permissions import IsProviderRole 
 from usuarios.permissions import IsClientRole
-from .models import Servicio, VistaInfoAplicantes, VistaPostDetails,Postulacion  
+from .models import Servicio, VistaInfoAplicantes, VistaPostDetails,Postulacion,VistaConversaciones   
 from .models.estado import ABIERTO, CANCELADO, PENDIENTE
 from .serializers import (
     CreateServicioSerializer,
@@ -22,7 +23,8 @@ from .serializers import (
     UpdateServicioSerializer,
     CreateOfertaSerializer,
     PostulacionSerializer,
-    CreatePostulacionSerializer,  
+    CreatePostulacionSerializer, 
+    ConversacionSerializer, 
 )
 
 
@@ -159,4 +161,21 @@ class PostularServicioView(APIView):
         return Response(
             PostulacionSerializer(postulacion).data, status=status.HTTP_201_CREATED
         )
+
+    
+class ConversacionListView(ListAPIView):
+    """Conversaciones del usuario autenticado (como cliente o como proveedor),
+    con el ultimo mensaje y el conteo de no leidos. Mas recientes primero."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ConversacionSerializer
  
+    def get_queryset(self):
+        usuario_id = self.request.user.id_usuario
+        return VistaConversaciones.objects.filter(
+            Q(cliente_id=usuario_id) | Q(proveedor_id=usuario_id)
+        ).order_by('-fecha_ultimo_mensaje')
+ 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
