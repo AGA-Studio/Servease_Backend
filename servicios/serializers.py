@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from rest_framework import serializers
-
+from rest_framework.exceptions import ValidationError
 from usuarios.models import Categoria
 from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado
 from .models.estado import ABIERTO, CANCELADO, PENDIENTE
@@ -222,3 +222,33 @@ class CreateOfertaSerializer(serializers.ModelSerializer):
         validated_data['estado_id'] = PENDIENTE
         validated_data['aceptacion'] = False
         return Oferta.objects.create(**validated_data)
+
+
+
+class PostulacionSerializer(serializers.ModelSerializer):
+    id_servicio = serializers.IntegerField(source='servicio_id')
+    proveedor_id = serializers.UUIDField()
+    id_estado = serializers.IntegerField(source='estado_id')
+    estado_descripcion = serializers.CharField(source='estado.descripcion', read_only=True)
+ 
+    class Meta:
+        model = Postulacion
+        fields = [
+            'id_postulacion', 'fecha', 'fecha_actualizacion', 'precio_propuesto',
+            'mensaje', 'id_estado', 'estado_descripcion', 'proveedor_id', 'id_servicio',
+        ]
+ 
+ 
+class CreatePostulacionSerializer(serializers.ModelSerializer):
+    precio_propuesto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1)
+    mensaje = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+ 
+    class Meta:
+        model = Postulacion
+        fields = ['precio_propuesto', 'mensaje']
+ 
+    def create(self, validated_data):
+        validated_data['proveedor'] = self.context['request'].user
+        validated_data['servicio'] = self.context['servicio']
+        validated_data['estado_id'] = PENDIENTE
+        return Postulacion.objects.create(**validated_data)

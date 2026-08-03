@@ -16,4 +16,5 @@ urlpatterns = [
     path('<int:id_servicio>/detalle/', views.PostDetailsView.as_view(), name='servicio-detalle'),
     path('<int:id_servicio>/aplicantes/', views.InfoAplicantesView.as_view(), name='servicio-aplicantes'),
     path('ofertas/crear/', views.OfertaCreateView.as_view(), name='oferta-create'),
+    path('<int:id_servicio>/postular/', views.PostularServicioView.as_view(), name='servicio-postular'),
 ]

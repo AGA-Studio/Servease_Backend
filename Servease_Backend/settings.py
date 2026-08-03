@@ -140,6 +140,7 @@ REST_FRAMEWORK = {
         'oferta-create': '20/hour',
         'mfa-backup-generate': '10/hour',
         'mfa-backup-verify': '15/hour',
+        'postulacion-create': '10/hour',
     },
 }
 
