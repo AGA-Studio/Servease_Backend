@@ -26,7 +26,19 @@ from servicios.serializers import ServicioListSerializer
 from servicios.models import Servicio
 from servicios.serializers import ServicioSerializer
 from .emails import send_confirmation_email
-from .models import Categoria, Usuario, VistaPerfilCliente, VistaReviewsCliente, VistaHomeCliente, VistaResumenGanancias, VistaTrabajosAplicados, VistaTrabajosDisponibles, VistaUltimaResena
+from .models import (
+    Categoria,
+    Usuario,
+    VistaPerfilCliente,
+    VistaReviewsCliente,
+    VistaHomeCliente,
+    VistaResumenGanancias,
+    VistaTrabajosAplicados,
+    VistaTrabajosDisponibles,
+    VistaUltimaResena,
+    Notificacion,
+    MfaBackupCode,
+)
 from .permissions import IsAdminRole, IsClientRole
 from .serializers import (
     CategoriaSerializer,
@@ -43,6 +55,8 @@ from .serializers import (
     TrabajoAplicadoSerializer,
     TrabajoDisponibleSerializer,
     UltimaResenaSerializer,
+    NotificacionSerializer,
+
 )
 from .storage import delete_profile_photos, upload_profile_photo
 from .supabase_admin import get_supabase_admin
@@ -601,3 +615,42 @@ class UltimasResenasView(ListAPIView):
         return VistaUltimaResena.objects.raw(
             'SELECT * FROM ultimas_resenas(%s)', [str(id_usuario)]
         )
+
+
+class NotificacionListView(ListAPIView):
+    """Notificaciones del usuario autenticado, mas recientes primero.
+    Filtro opcional: ?leido=true o ?leido=false
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = NotificacionSerializer
+ 
+    def get_queryset(self):
+        queryset = Notificacion.objects.filter(usuario=self.request.user).order_by('-fecha')
+        leido = self.request.query_params.get('leido')
+        if leido is not None:
+            queryset = queryset.filter(leido=leido.lower() == 'true')
+        return queryset
+ 
+ 
+class NotificacionMarkReadView(APIView):
+    """Marca UNA notificacion como leida. Solo el dueno."""
+    permission_classes = [IsAuthenticated]
+ 
+    def patch(self, request, id_notificacion):
+        notificacion = get_object_or_404(Notificacion, pk=id_notificacion)
+        if notificacion.usuario_id != request.user.id_usuario:
+            raise PermissionDenied('No puedes modificar una notificación que no es tuya.')
+        notificacion.leido = True
+        notificacion.save(update_fields=['leido'])
+        return Response(NotificacionSerializer(notificacion).data)
+ 
+ 
+class NotificacionMarkAllReadView(APIView):
+    """Marca TODAS las notificaciones del usuario autenticado como leidas."""
+    permission_classes = [IsAuthenticated]
+ 
+    def patch(self, request):
+        actualizadas = Notificacion.objects.filter(
+            usuario=request.user, leido=False
+        ).update(leido=True)
+        return Response({'detail': f'{actualizadas} notificaciones marcadas como leídas.'})

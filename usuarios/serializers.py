@@ -12,6 +12,7 @@ from .models import (
     VistaTrabajosAplicados,
     VistaTrabajosDisponibles,
     VistaUltimaResena,
+    Notificacion,
 )
 
 ROL_ID_TO_ROLE = {
@@ -140,4 +141,13 @@ class UltimaResenaSerializer(serializers.ModelSerializer):
     class Meta:
         model = VistaUltimaResena
         fields = '__all__'
+
+class NotificacionSerializer(serializers.ModelSerializer):
+    id_usuario = serializers.UUIDField(source='usuario_id', read_only=True)
  
+    class Meta:
+        model = Notificacion
+        fields = [
+            'id_notificacion', 'id_usuario', 'tipo', 'titulo', 'contenido',
+            'leido', 'fecha', 'referencia_tabla', 'referencia_id',
+        ]
