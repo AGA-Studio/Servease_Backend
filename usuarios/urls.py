@@ -28,4 +28,7 @@ urlpatterns = [
     path('trabajos-disponibles/', views.TrabajosDisponiblesView.as_view(), name='trabajos-disponibles'),
     path('<uuid:id_usuario>/categorias/', views.ProveedorCategoriasView.as_view(), name='usuario-categorias'),
     path('<uuid:id_usuario>/ultimas-resenas/', views.UltimasResenasView.as_view(), name='usuario-ultimas-resenas'),
+    path('notificaciones/', views.NotificacionListView.as_view(), name='notificacion-list'),
+    path('notificaciones/<int:id_notificacion>/leida/', views.NotificacionMarkReadView.as_view(), name='notificacion-mark-read'),
+    path('notificaciones/marcar-todas-leidas/', views.NotificacionMarkAllReadView.as_view(), name='notificacion-mark-all-read'),
 ]

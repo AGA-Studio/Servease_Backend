@@ -2,9 +2,9 @@ from decimal import Decimal
 
 from django.conf import settings
 from rest_framework import serializers
-
+from rest_framework.exceptions import ValidationError
 from usuarios.models import Categoria
-from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado
+from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado,VistaConversaciones  
 from .models.estado import ABIERTO, CANCELADO, PENDIENTE
 
 # Bounding box del área urbana de Tijuana (excluye Tecate, Rosarito, Ensenada).
@@ -260,3 +260,54 @@ class CreateOfertaSerializer(serializers.ModelSerializer):
         validated_data['estado_id'] = PENDIENTE
         validated_data['aceptacion'] = False
         return Oferta.objects.create(**validated_data)
+
+
+
+class PostulacionSerializer(serializers.ModelSerializer):
+    id_servicio = serializers.IntegerField(source='servicio_id')
+    proveedor_id = serializers.UUIDField()
+    id_estado = serializers.IntegerField(source='estado_id')
+    estado_descripcion = serializers.CharField(source='estado.descripcion', read_only=True)
+ 
+    class Meta:
+        model = Postulacion
+        fields = [
+            'id_postulacion', 'fecha', 'fecha_actualizacion', 'precio_propuesto',
+            'mensaje', 'id_estado', 'estado_descripcion', 'proveedor_id', 'id_servicio',
+        ]
+ 
+ 
+class CreatePostulacionSerializer(serializers.ModelSerializer):
+    precio_propuesto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1)
+    mensaje = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+ 
+    class Meta:
+        model = Postulacion
+        fields = ['precio_propuesto', 'mensaje']
+ 
+    def create(self, validated_data):
+        validated_data['proveedor'] = self.context['request'].user
+        validated_data['servicio'] = self.context['servicio']
+        validated_data['estado_id'] = PENDIENTE
+        return Postulacion.objects.create(**validated_data)
+
+    
+#conversaciones
+class ConversacionSerializer(serializers.ModelSerializer):
+    no_leidos = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = VistaConversaciones
+        fields = [
+            'id_conversacion', 'fecha_inicio', 'estado', 'servicio_id', 'servicio_titulo',
+            'cliente_id', 'nombre_cliente', 'foto_cliente',
+            'proveedor_id', 'nombre_proveedor', 'foto_proveedor',
+            'ultimo_mensaje', 'fecha_ultimo_mensaje', 'no_leidos',
+        ]
+ 
+    def get_no_leidos(self, obj):
+        usuario_id = self.context['request'].user.id_usuario
+        if usuario_id == obj.cliente_id:
+            return obj.no_leidos_cliente
+        return obj.no_leidos_proveedor
+ 
