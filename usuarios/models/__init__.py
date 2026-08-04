@@ -15,6 +15,7 @@ from .notificacion import Notificacion
 from .vista_resumen_ganancias import VistaResumenGanancias
 from .vista_trabajos_aplicados import VistaTrabajosAplicados
 from .vista_trabajos_disponibles import VistaTrabajosDisponibles
+from .PortafolioProveedor import PortafolioProveedor
 
 __all__ = [
     'Empresa', 'Sucursal', 'Rol', 'Categoria', 'Usuario',
@@ -22,5 +23,5 @@ __all__ = [
     'VistaResumenGanancias', 'VistaTrabajosAplicados', 'VistaTrabajosDisponibles', 'VistaUltimaResena',
     'MfaBackupCode', 'Notificacion',
     'MfaBackupCode', 'VistaResumenGanancias', 'VistaTrabajosAplicados',
-    'VistaTrabajosDisponibles',
+    'VistaTrabajosDisponibles','PortafolioProveedor'
 ]
