@@ -17,7 +17,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q  
 from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.exceptions import ValidationError
+from usuarios.permissions import IsProviderRole 
+from usuarios.permissions import IsClientRole
+from .models import Servicio, VistaInfoAplicantes, VistaPostDetails,Postulacion,VistaConversaciones   
 
 from calificaciones.models import Calificacion
 from mensajeria.models import Conversacion
@@ -38,6 +43,9 @@ from .serializers import (
     ServicioSerializer,
     UpdateServicioSerializer,
     CreateOfertaSerializer,
+    PostulacionSerializer,
+    CreatePostulacionSerializer, 
+    ConversacionSerializer, 
 )
 
 
@@ -834,3 +842,49 @@ class OfertaCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         oferta = serializer.save()
         return Response(OfertaSerializer(oferta).data, status=status.HTTP_201_CREATED)
+
+class PostularServicioView(APIView):
+    """Un proveedor se postula a un servicio abierto."""
+    permission_classes = [IsAuthenticated, IsProviderRole]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'postulacion-create'
+ 
+    def post(self, request, id_servicio):
+        servicio = get_object_or_404(Servicio, pk=id_servicio)
+ 
+        if servicio.estado_id != ABIERTO:
+            raise ValidationError('Este servicio ya no acepta postulaciones.')
+ 
+        if servicio.cliente_id == request.user.id_usuario:
+            raise PermissionDenied('No puedes postularte a tu propio servicio.')
+ 
+        if Postulacion.objects.filter(servicio=servicio, proveedor=request.user).exists():
+            raise ValidationError('Ya te postulaste a este servicio.')
+ 
+        serializer = CreatePostulacionSerializer(
+            data=request.data,
+            context={'request': request, 'servicio': servicio}
+        )
+        serializer.is_valid(raise_exception=True)
+        postulacion = serializer.save()
+        return Response(
+            PostulacionSerializer(postulacion).data, status=status.HTTP_201_CREATED
+        )
+
+    
+class ConversacionListView(ListAPIView):
+    """Conversaciones del usuario autenticado (como cliente o como proveedor),
+    con el ultimo mensaje y el conteo de no leidos. Mas recientes primero."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ConversacionSerializer
+ 
+    def get_queryset(self):
+        usuario_id = self.request.user.id_usuario
+        return VistaConversaciones.objects.filter(
+            Q(cliente_id=usuario_id) | Q(proveedor_id=usuario_id)
+        ).order_by('-fecha_ultimo_mensaje')
+ 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
