@@ -1,16 +1,14 @@
 """
 ASGI config for Servease_Backend project.
 
-It exposes the ASGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/
+Expone el callable ``application``. Sin Django Channels: el tiempo real
+se maneja vía Supabase Realtime, el servidor solo sirve HTTP.
 """
 
 import os
 
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Servease_Backend.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Servease_Backend.settings")
 
 application = get_asgi_application()
