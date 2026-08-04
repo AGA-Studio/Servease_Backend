@@ -13,6 +13,7 @@ from .models import (
     VistaTrabajosDisponibles,
     VistaUltimaResena,
     Notificacion,
+    PortafolioProveedor,  
 )
 
 ROL_ID_TO_ROLE = {
@@ -169,3 +170,48 @@ class NotificacionSerializer(serializers.ModelSerializer):
             'id_notificacion', 'id_usuario', 'tipo', 'titulo', 'contenido',
             'leido', 'fecha', 'referencia_tabla', 'referencia_id',
         ]
+
+#Portafolio Proveedor Serializer
+class PortafolioSerializer(serializers.ModelSerializer):
+    id_proveedor = serializers.UUIDField(source='proveedor_id')
+    id_categoria = serializers.IntegerField(source='categoria_id')
+    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+ 
+    class Meta:
+        model = PortafolioProveedor
+        fields = [
+            'id_portafolio', 'titulo', 'descripcion', 'fotos', 'fecha',
+            'id_proveedor', 'id_categoria', 'categoria_nombre',
+        ]
+ 
+ 
+class CreatePortafolioSerializer(serializers.ModelSerializer):
+    id_categoria = serializers.PrimaryKeyRelatedField(
+        source='categoria', queryset=Categoria.objects.all()
+    )
+    fotos = serializers.ListField(
+        child=serializers.URLField(max_length=500), required=False, default=list
+    )
+ 
+    class Meta:
+        model = PortafolioProveedor
+        fields = ['titulo', 'descripcion', 'id_categoria', 'fotos']
+ 
+    def validate_fotos(self, value):
+        usuario = self.context['request'].user
+        expected_prefix = (
+            f'{settings.SUPABASE_URL}/storage/v1/object/public/'
+            f'portafolio_fotos/user_{usuario.id_usuario}/'
+        )
+        for url in value:
+            if not url.startswith(expected_prefix):
+                raise serializers.ValidationError(
+                    'Las fotos deben apuntar a tu propia carpeta en el '
+                    'bucket de fotos de portafolio.'
+                )
+        return value
+ 
+    def create(self, validated_data):
+        validated_data['proveedor'] = self.context['request'].user
+        return PortafolioProveedor.objects.create(**validated_data)
+ 
