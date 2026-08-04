@@ -38,6 +38,7 @@ from .models import (
     VistaUltimaResena,
     Notificacion,
     MfaBackupCode,
+    PortafolioProveedor,  
 )
 from .permissions import IsAdminRole, IsClientRole
 from .serializers import (
@@ -57,6 +58,8 @@ from .serializers import (
     TrabajoDisponibleSerializer,
     UltimaResenaSerializer,
     NotificacionSerializer,
+    PortafolioSerializer,
+    CreatePortafolioSerializer,  
 
 )
 from .storage import delete_profile_photos, upload_profile_photo
@@ -679,3 +682,36 @@ class NotificacionMarkAllReadView(APIView):
             usuario=request.user, leido=False
         ).update(leido=True)
         return Response({'detail': f'{actualizadas} notificaciones marcadas como leídas.'})
+
+
+class PortafolioListView(ListAPIView):
+    """Portafolio publico de un proveedor."""
+    permission_classes = [AllowAny]
+    serializer_class = PortafolioSerializer
+ 
+    def get_queryset(self):
+        id_usuario = self.kwargs['id_usuario']
+        return PortafolioProveedor.objects.filter(proveedor_id=id_usuario).order_by('-fecha')
+ 
+ 
+class PortafolioCreateView(APIView):
+    """Agrega un trabajo al portafolio. Solo el proveedor logueado, para si mismo."""
+    permission_classes = [IsAuthenticated, IsProviderRole]
+ 
+    def post(self, request):
+        serializer = CreatePortafolioSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        item = serializer.save()
+        return Response(PortafolioSerializer(item).data, status=status.HTTP_201_CREATED)
+ 
+ 
+class PortafolioDeleteView(APIView):
+    """Elimina un item del portafolio. Solo el dueno."""
+    permission_classes = [IsAuthenticated, IsProviderRole]
+ 
+    def delete(self, request, id_portafolio):
+        item = get_object_or_404(PortafolioProveedor, pk=id_portafolio)
+        if item.proveedor_id != request.user.id_usuario:
+            raise PermissionDenied('No puedes eliminar un portafolio que no es tuyo.')
+        item.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
