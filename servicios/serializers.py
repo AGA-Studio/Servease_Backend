@@ -178,6 +178,44 @@ class ServicioListSerializer(serializers.ModelSerializer):
         return obj.tipo_cambio.nombre if obj.tipo_cambio_id else None
 
 
+class CompletarServicioSerializer(serializers.Serializer):
+    metodo_pago = serializers.ChoiceField(choices=['efectivo', 'tarjeta'])
+    puntuacion = serializers.IntegerField(min_value=1, max_value=5)
+    comentario = serializers.CharField(
+        required=False, allow_blank=True, max_length=1000, default=''
+    )
+
+
+class CalificarServicioSerializer(serializers.Serializer):
+    puntuacion = serializers.IntegerField(min_value=1, max_value=5)
+    comentario = serializers.CharField(
+        required=False, allow_blank=True, max_length=1000, default=''
+    )
+
+
+class MisTrabajosSerializer(serializers.ModelSerializer):
+    id_servicio = serializers.IntegerField(source='servicio.id_servicio', read_only=True)
+    titulo = serializers.CharField(source='servicio.titulo', read_only=True)
+    categoria_nombre = serializers.CharField(source='servicio.categoria.nombre', read_only=True)
+    imagenes = serializers.ListField(source='servicio.imagenes', read_only=True)
+    servicio_estado = serializers.CharField(source='servicio.estado', read_only=True)
+    precio_acordado = serializers.SerializerMethodField()
+    moneda = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Postulacion
+        fields = [
+            'id_postulacion', 'id_servicio', 'titulo', 'categoria_nombre',
+            'imagenes', 'estado', 'servicio_estado', 'fecha',
+            'precio_propuesto', 'precio_acordado', 'moneda',
+        ]
+
+    def get_precio_acordado(self, obj):
+        ultima_oferta = obj.ofertas.order_by('-fecha').first()
+        return ultima_oferta.monto if ultima_oferta else obj.precio_propuesto
+
+    def get_moneda(self, obj):
+        return obj.servicio.tipo_cambio.nombre if obj.servicio.tipo_cambio_id else 'MXN'
 
 
 # Oferta y postulacion

@@ -12,10 +12,15 @@ from .vista_trabajos_disponibles import VistaTrabajosDisponibles
 from .VistaUltimaResena import VistaUltimaResena
 from .mfa_backup_code import MfaBackupCode
 from .notificacion import Notificacion
+from .vista_resumen_ganancias import VistaResumenGanancias
+from .vista_trabajos_aplicados import VistaTrabajosAplicados
+from .vista_trabajos_disponibles import VistaTrabajosDisponibles
 
 __all__ = [
     'Empresa', 'Sucursal', 'Rol', 'Categoria', 'Usuario',
     'VistaPerfilCliente', 'VistaReviewsCliente', 'VistaHomeCliente',
     'VistaResumenGanancias', 'VistaTrabajosAplicados', 'VistaTrabajosDisponibles', 'VistaUltimaResena',
     'MfaBackupCode', 'Notificacion',
+    'MfaBackupCode', 'VistaResumenGanancias', 'VistaTrabajosAplicados',
+    'VistaTrabajosDisponibles',
 ]
