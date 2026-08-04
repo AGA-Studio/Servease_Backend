@@ -2,4 +2,4 @@ from django.apps import AppConfig
 
 
 class MensajeriaConfig(AppConfig):
-    name = 'mensajeria'
+    name = "mensajeria"

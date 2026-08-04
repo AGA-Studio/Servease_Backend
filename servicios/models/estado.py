@@ -22,3 +22,7 @@ COMPLETADO = 5
 CONTRAOFERTA = 6
 ABIERTO = 7
 CANCELADO = 8
+
+# Estados propios de mensajería (agregados por el módulo de mensajería)
+ACTIVA = 9
+ARCHIVADA = 10
