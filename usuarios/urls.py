@@ -31,4 +31,7 @@ urlpatterns = [
     path('notificaciones/', views.NotificacionListView.as_view(), name='notificacion-list'),
     path('notificaciones/<int:id_notificacion>/leida/', views.NotificacionMarkReadView.as_view(), name='notificacion-mark-read'),
     path('notificaciones/marcar-todas-leidas/', views.NotificacionMarkAllReadView.as_view(), name='notificacion-mark-all-read'),
+    path('<uuid:id_usuario>/portafolio/', views.PortafolioListView.as_view(), name='portafolio-list'),
+    path('portafolio/crear/', views.PortafolioCreateView.as_view(), name='portafolio-create'),
+    path('portafolio/<int:id_portafolio>/eliminar/', views.PortafolioDeleteView.as_view(), name='portafolio-delete'),
 ]
