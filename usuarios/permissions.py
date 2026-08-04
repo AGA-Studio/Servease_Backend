@@ -11,3 +11,4 @@ class IsClientRole(BasePermission):
 class IsProviderRole(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and getattr(request.user, 'rol_id', None) == 2)
+    
