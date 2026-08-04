@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'django_filters',
 
     'rest_framework',
+    'drf_spectacular',
     'corsheaders',
 
     'usuarios',
@@ -124,6 +125,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Django REST Framework
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'usuarios.authentication.SupabaseAuthentication',
     ],
@@ -153,6 +155,10 @@ REST_FRAMEWORK = {
         'mfa-enroll': '10/hour',
         'mfa-challenge': '20/hour',
         'mfa-verify': '20/hour',
+        'mensajes.create': '30/min',
+        'mensajes.list': '120/min',
+        'conversaciones.list': '60/min',
+        'mensajes.detail': '60/min',
     },
 }
 
@@ -177,3 +183,15 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 # al endpoint del webhook.
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+
+# drf-spectacular (Swagger)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Servease API',
+    'DESCRIPTION': 'API para plataforma de servicios profesionales con mensajería en tiempo real',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SORT_OPERATIONS': False,
+    'SECURITY': [{'bearerAuth': []}],
+}
