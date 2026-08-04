@@ -53,6 +53,7 @@ from .serializers import (
     AreasTrabajoSerializer,
     ResumenGananciasSerializer,
     TrabajoAplicadoSerializer,
+    TrabajoAplicadoCardSerializer,
     TrabajoDisponibleSerializer,
     UltimaResenaSerializer,
     NotificacionSerializer,
@@ -123,6 +124,8 @@ class UpdatePersonalInfoView(APIView):
 class RequestPasswordResetView(APIView):
     """Dispara el correo de restablecimiento de contraseña de Supabase."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password-reset'
 
     def post(self, request):
         url = f"{settings.SUPABASE_URL}/auth/v1/recover"
@@ -148,6 +151,8 @@ class RequestPasswordResetView(APIView):
 class MfaEnrollView(APIView):
     """Inicia el registro de 2FA (TOTP): regresa QR/secret."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-enroll'
 
     def post(self, request):
         url = f"{settings.SUPABASE_URL}/auth/v1/factors"
@@ -174,6 +179,8 @@ class MfaEnrollView(APIView):
 class MfaChallengeView(APIView):
     """Crea el challenge para verificar el factor recién registrado."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-challenge'
 
     def post(self, request, factor_id):
         url = f"{settings.SUPABASE_URL}/auth/v1/factors/{factor_id}/challenge"
@@ -196,6 +203,8 @@ class MfaChallengeView(APIView):
 class MfaVerifyView(APIView):
     """Verifica el código TOTP ingresado por el usuario."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'mfa-verify'
 
     def post(self, request, factor_id):
         code = request.data.get('code')
@@ -555,14 +564,30 @@ class ResumenGananciasView(RetrieveAPIView):
  
  
 class TrabajosAplicadosView(ListAPIView):
-    """Postulaciones hechas por el proveedor logueado."""
+    """
+    Postulaciones hechas por el proveedor logueado, en todos los estados.
+    Filtros opcionales via query params:
+      ?estado_id=1      (pendiente/contraoferta/rechazado/aceptado/finalizado)
+      ?categoria_id=1   (una de las categorias del proveedor)
+    """
     permission_classes = [IsAuthenticated, IsProviderRole]
     serializer_class = TrabajoAplicadoSerializer
- 
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['estado_id', 'categoria_id']
+
     def get_queryset(self):
         return VistaTrabajosAplicados.objects.filter(
             proveedor_id=self.request.user.id_usuario
         ).order_by('-id_postulacion')
+
+
+class TrabajosAplicadosCardsView(TrabajosAplicadosView):
+    """
+    Mismo listado que /trabajos-aplicados/ (mismos filtros), pero con el
+    shape reducido para las cards: categoria, estado, titulo, tiempo
+    transcurrido, presupuesto y una sola foto.
+    """
+    serializer_class = TrabajoAplicadoCardSerializer
 
 
 
