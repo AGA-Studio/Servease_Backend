@@ -29,7 +29,7 @@ async def _broadcast_async(channel_name: str, event: str, payload: dict) -> None
     channel = client.channel(channel_name)
     try:
         await channel.subscribe()
-        channel.send_broadcast(event=event, data=payload)
+        await channel.send_broadcast(event=event, data=payload)
     finally:
         await client.remove_channel(channel)
 

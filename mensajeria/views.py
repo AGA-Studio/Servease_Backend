@@ -266,7 +266,8 @@ class MensajeDetailView(APIView):
         serializer.is_valid(raise_exception=True)
 
         mensaje.contenido = serializer.validated_data["contenido"]
-        mensaje.save(update_fields=["contenido"])
+        mensaje.editado = True
+        mensaje.save(update_fields=["contenido", "editado"])
 
         result = MensajeSerializer(mensaje, context={"request": request}).data
         return Response(result)
