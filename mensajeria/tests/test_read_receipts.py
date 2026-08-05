@@ -55,7 +55,7 @@ class ReadReceiptTests(TestCase):
         )
         Mensaje.objects.create(
             conversacion=conv,
-            emisor=self.proveedor,
+            emisor=self.proveedor, receptor=self.cliente,
             contenido="Hola cliente",
             leido=False,
         )
@@ -74,18 +74,18 @@ class ReadReceiptTests(TestCase):
             cliente=self.cliente, proveedor=self.proveedor
         )
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="My msg", leido=False
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="My msg", leido=False
         )
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.proveedor, contenido="Their msg", leido=False
+            conversacion=conv, emisor=self.proveedor, receptor=self.cliente, contenido="Their msg", leido=False
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.patch(
             f"/api/mensajeria/conversaciones/{conv.id_conversacion}/leido/",
         )
         self.assertEqual(resp.data["count"], 1)
-        my_msg = Mensaje.objects.get(conversacion=conv, emisor=self.cliente)
-        their_msg = Mensaje.objects.get(conversacion=conv, emisor=self.proveedor)
+        my_msg = Mensaje.objects.get(conversacion=conv, emisor=self.cliente, receptor=self.proveedor)
+        their_msg = Mensaje.objects.get(conversacion=conv, emisor=self.proveedor, receptor=self.cliente)
         self.assertFalse(my_msg.leido)
         self.assertTrue(their_msg.leido)
 
@@ -98,7 +98,7 @@ class ReadReceiptTests(TestCase):
         )
         Mensaje.objects.create(
             conversacion=conv,
-            emisor=self.proveedor,
+            emisor=self.proveedor, receptor=self.cliente,
             contenido="Already read",
             leido=True,
         )
@@ -144,7 +144,7 @@ class ReadReceiptTests(TestCase):
         for i in range(5):
             Mensaje.objects.create(
                 conversacion=conv,
-                emisor=self.proveedor,
+                emisor=self.proveedor, receptor=self.cliente,
                 contenido=f"Msg {i}",
                 leido=False,
             )
@@ -154,6 +154,6 @@ class ReadReceiptTests(TestCase):
         )
         self.assertEqual(resp.data["count"], 5)
         unread = Mensaje.objects.filter(
-            conversacion=conv, emisor=self.proveedor, leido=False
+            conversacion=conv, emisor=self.proveedor, receptor=self.cliente, leido=False
         ).count()
         self.assertEqual(unread, 0)

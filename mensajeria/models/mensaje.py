@@ -40,6 +40,13 @@ class Mensaje(models.Model):
     emisor = models.ForeignKey(
         "usuarios.Usuario", on_delete=models.CASCADE, related_name="mensajes_enviados"
     )
+    # Receptor: el otro participante de la conversación. NOT NULL porque el
+    # remoto lo usa: trigger notificar_nuevo_mensaje() + vista_conversaciones.
+    receptor = models.ForeignKey(
+        "usuarios.Usuario",
+        on_delete=models.CASCADE,
+        related_name="mensajes_recibidos",
+    )
 
     class Meta:
         db_table = "mensaje"

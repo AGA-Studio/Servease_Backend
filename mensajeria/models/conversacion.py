@@ -1,15 +1,19 @@
 from django.db import models
 
+from servicios.models.estado import ACTIVA, ARCHIVADA
+
 
 class Conversacion(models.Model):
-    ESTADO_CHOICES = (
-        ("activa", "Activa"),
-        ("archivada", "Archivada"),
-    )
-
     id_conversacion = models.AutoField(primary_key=True)
     fecha_inicio = models.DateTimeField(auto_now_add=True)
-    estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default="activa")
+    # FK al catálogo compartido de estados (estandarización del equipo).
+    # "Activa"/"Archivada" viven en la tabla `estado` (ver servicios/estado.py).
+    estado = models.ForeignKey(
+        "servicios.Estado",
+        on_delete=models.PROTECT,
+        related_name="conversaciones",
+        default=ACTIVA,
+    )
     servicio = models.ForeignKey(
         "servicios.Servicio",
         on_delete=models.CASCADE,

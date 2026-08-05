@@ -1,315 +1,139 @@
-"""Tests for WebSocket consumer and JWT auth middleware."""
+"""Tests de mensajería REST + publicación de eventos Realtime.
+
+Reemplaza los tests de WebSocket/Channels: la capa en vivo ahora es
+Supabase Realtime vía `publish_event` (fire-and-forget), así que estos
+tests verifican que las vistas REST persisten y publican el evento correcto
+sobre el canal de la conversación.
+"""
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from asgiref.sync import sync_to_async
-from channels.testing import WebsocketCommunicator
-from django.test import TransactionTestCase
+from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient
 
-from mensajeria.consumers import ChatConsumer
 from mensajeria.models import Conversacion, Mensaje
 from usuarios.models import Rol, Usuario
 
 
-class JWTAuthMiddlewareTests(TransactionTestCase):
-    """Tests for WebSocket JWT authentication middleware logic paths."""
-
-    async def _make_scope(self, query_string=b""):
-        return {
-            "type": "websocket",
-            "query_string": query_string,
-            "path": "/ws/test/",
-        }
-
-    async def _run_middleware(self, scope, mock_inner=None):
-        """Run JWTAuthMiddleware.__call__ with a mock inner app and return (sent, inner_called)."""
-        from mensajeria.auth_ws import JWTAuthMiddleware
-
-        inner_called = False
-
-        async def default_inner(s, r, send):
-            nonlocal inner_called
-            inner_called = True
-
-        inner = mock_inner or default_inner
-        app = JWTAuthMiddleware(inner)
-        sent = []
-
-        async def mock_send(msg):
-            sent.append(msg)
-
-        # Events in ASGI consumer lifecycle order:
-        # 1. websocket.connect  → triggers connect() → close() for denier
-        # 2. websocket.disconnect → triggers disconnect() → StopConsumer
-        step = 0
-
-        async def mock_receive():
-            nonlocal step
-            step += 1
-            if step == 1:
-                return {"type": "websocket.connect"}
-            return {"type": "websocket.disconnect", "code": 1000}
-
-        await app(scope, mock_receive, mock_send)
-        return sent, inner_called
-
-    async def test_missing_token_returns_close(self):
-        """No token in query string sends websocket.close."""
-        sent, inner_called = await self._run_middleware(await self._make_scope(b""))
-        close_msgs = [m for m in sent if m.get("type") == "websocket.close"]
-        self.assertTrue(close_msgs, msg=f"Expected close, got: {sent}")
-        self.assertFalse(
-            inner_called,
-            msg="Inner ASGI app should not be called when token is missing",
-        )
-
-    @patch("mensajeria.auth_ws.jwt.decode")
-    async def test_invalid_token_returns_close(self, mock_decode):
-        """Invalid JWT sends websocket.close."""
-        mock_decode.side_effect = Exception("invalid token")
-        sent, inner_called = await self._run_middleware(
-            await self._make_scope(b"token=fake.jwt.tok")
-        )
-        close_msgs = [m for m in sent if m.get("type") == "websocket.close"]
-        self.assertTrue(close_msgs, msg=f"Expected close on invalid token, got: {sent}")
-        self.assertFalse(
-            inner_called, msg="Inner should not be called on invalid token"
-        )
-
-    @patch("jwt.PyJWKClient")
-    async def test_network_error_returns_close(self, mock_jwks_client):
-        """Network error during JWKS fetch sends websocket.close."""
-        client_instance = MagicMock()
-        mock_jwks_client.return_value = client_instance
-        client_instance.get_signing_key_from_jwt.side_effect = ConnectionError(
-            "JWKS dead"
-        )
-
-        sent, inner_called = await self._run_middleware(
-            await self._make_scope(b"token=fake.jwt.tok")
-        )
-        close_msgs = [m for m in sent if m.get("type") == "websocket.close"]
-        self.assertTrue(close_msgs, msg=f"Expected close on network error, got: {sent}")
-        self.assertFalse(
-            inner_called, msg="Inner should not be called on network error"
-        )
-
-
-class ChatConsumerTests(TransactionTestCase):
-    """Tests for ChatConsumer WebSocket endpoint."""
+class MensajeriaRealtimeEventTests(TestCase):
+    """POST de mensaje crea el mensaje y publica new_message vía publish_event."""
 
     def setUp(self):
-        """Create test users and conversation with unique UUIDs."""
-        super().setUp()
         self.rol_cliente = Rol.objects.create(id_rol=1, nombre="Cliente")
         self.rol_proveedor = Rol.objects.create(id_rol=2, nombre="Proveedor")
-        self.cliente_uuid = uuid.uuid4()
-        self.proveedor_uuid = uuid.uuid4()
         self.cliente = Usuario.objects.create(
-            id_usuario=self.cliente_uuid,
+            id_usuario=uuid.uuid4(),
             nombre="Cliente",
             apellido_pa="Test",
-            correo=f"__VG_WS_CLIENT_{self.cliente_uuid}__",
+            correo=f"__VG_RT_CLIENT_{uuid.uuid4()}__",
             rol=self.rol_cliente,
         )
         self.proveedor = Usuario.objects.create(
-            id_usuario=self.proveedor_uuid,
+            id_usuario=uuid.uuid4(),
             nombre="Proveedor",
             apellido_pa="Test",
-            correo=f"__VG_WS_PROV_{self.proveedor_uuid}__",
+            correo=f"__VG_RT_PROV_{uuid.uuid4()}__",
             rol=self.rol_proveedor,
         )
         self.conv = Conversacion.objects.create(
-            cliente=self.cliente,
-            proveedor=self.proveedor,
+            cliente=self.cliente, proveedor=self.proveedor
         )
+        self.api_client = APIClient()
 
-    async def get_communicator(self, user):
-        """Create a WebsocketCommunicator connected as the given user."""
-        app = ChatConsumer.as_asgi()
-        communicator = WebsocketCommunicator(
-            app,
-            f"/ws/mensajeria/{self.conv.id_conversacion}/",
-        )
-        communicator.scope["user"] = user
-        communicator.scope["url_route"] = {
-            "kwargs": {"conversacion_id": str(self.conv.id_conversacion)},
-        }
-        connected, _ = await communicator.connect()
-        return communicator, connected
+    def _url_mensajes(self):
+        return f"/api/mensajeria/conversaciones/{self.conv.id_conversacion}/mensajes/"
 
-    async def test_connect_unauthenticated(self):
-        """Connection without user is rejected with 4001."""
-        communicator = WebsocketCommunicator(
-            ChatConsumer.as_asgi(),
-            "/ws/mensajeria/1/",
-        )
-        anon = MagicMock()
-        anon.is_authenticated = False
-        communicator.scope["user"] = anon
-        communicator.scope["url_route"] = {"kwargs": {"conversacion_id": "1"}}
-        connected, _ = await communicator.connect()
-        self.assertFalse(connected)
+    # ─── Envío de mensaje ───
 
-    async def test_connect_non_participant(self):
-        """Connection from non-participant is rejected with 4003."""
-        outsider_uuid = uuid.uuid4()
-        outsider = await sync_to_async(Usuario.objects.create)(
-            id_usuario=outsider_uuid,
+    def test_send_message_persists_and_publishes(self):
+        """POST mensaje: persiste en BD y publica new_message."""
+        self.api_client.force_authenticate(user=self.cliente)
+        with patch("mensajeria.views.publish_event") as mock_pub:
+            resp = self.api_client.post(
+                self._url_mensajes(), {"contenido": "Hola desde REST!"}, format="json"
+            )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["text"], "Hola desde REST!")
+        self.assertEqual(Mensaje.objects.count(), 1)
+
+        mock_pub.assert_called_once()
+        conv_id, event, payload = mock_pub.call_args.args
+        self.assertEqual(conv_id, self.conv.id_conversacion)
+        self.assertEqual(event, "new_message")
+        self.assertEqual(payload["text"], "Hola desde REST!")
+        self.assertEqual(payload["emisor_id"], str(self.cliente.id_usuario))
+
+    def test_message_payload_has_sender_info(self):
+        """El payload incluye sender/senderName para que el frontend diferencie emisor."""
+        self.api_client.force_authenticate(user=self.proveedor)
+        with patch("mensajeria.views.publish_event") as mock_pub:
+            self.api_client.post(
+                self._url_mensajes(), {"contenido": "Otra prueba"}, format="json"
+            )
+        _, _, payload = mock_pub.call_args.args
+        self.assertEqual(payload["senderName"], "Proveedor Test")
+
+    def test_empty_message_rejected(self):
+        """Mensaje vacío o solo espacios devuelve 400 (no publica nada)."""
+        self.api_client.force_authenticate(user=self.cliente)
+        with patch("mensajeria.views.publish_event") as mock_pub:
+            resp = self.api_client.post(
+                self._url_mensajes(), {"contenido": "   "}, format="json"
+            )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Mensaje.objects.count(), 0)
+        mock_pub.assert_not_called()
+
+    def test_non_participant_cannot_post(self):
+        """Un usuario fuera de la conversación recibe 403."""
+        outsider = Usuario.objects.create(
+            id_usuario=uuid.uuid4(),
             nombre="Outsider",
             apellido_pa="Test",
-            correo=f"__VG_WS_OUT_{outsider_uuid}__",
+            correo=f"__VG_RT_OUT_{uuid.uuid4()}__",
             rol=self.rol_cliente,
         )
-        _communicator, connected = await self.get_communicator(outsider)
-        self.assertFalse(connected)
-
-    async def test_connect_participant(self):
-        """Participant can connect successfully."""
-        communicator, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
-        await communicator.disconnect()
-
-    async def test_send_message(self):
-        """Sending a new_message persists and broadcasts."""
-        communicator, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
-
-        await communicator.send_json_to(
-            {
-                "action": "new_message",
-                "contenido": "Hola desde WS!",
-            }
+        self.api_client.force_authenticate(user=outsider)
+        resp = self.api_client.post(
+            self._url_mensajes(), {"contenido": "Intruso"}, format="json"
         )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-        response = await communicator.receive_json_from(timeout=5)
-        self.assertEqual(response["text"], "Hola desde WS!")
-        self.assertEqual(response["sender"], "user")
-        self.assertEqual(response["senderName"], "Cliente Test")
-
-        msg_count = await sync_to_async(Mensaje.objects.count)()
-        self.assertEqual(msg_count, 1)
-        await communicator.disconnect()
-
-    async def test_send_message_broadcasts_to_group(self):
-        """Both participants in the group receive the message with correct sender."""
-        comm_cliente, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
-
-        comm_proveedor, connected2 = await self.get_communicator(self.proveedor)
-        self.assertTrue(connected2)
-
-        await comm_cliente.send_json_to(
-            {
-                "action": "new_message",
-                "contenido": "Broadcast test!",
-            }
+    def test_unauthenticated_rejected(self):
+        """Sin autenticación: 403 (SupabaseAuthentication no emite WWW-Authenticate)."""
+        resp = self.api_client.post(
+            self._url_mensajes(), {"contenido": "Anon"}, format="json"
         )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-        msg1 = await comm_cliente.receive_json_from(timeout=5)
-        msg2 = await comm_proveedor.receive_json_from(timeout=5)
+    # ─── Estado de entrega (equivalente al marcado del WS al conectar) ───
 
-        self.assertEqual(msg1["text"], "Broadcast test!")
-        self.assertEqual(msg2["text"], "Broadcast test!")
-        self.assertEqual(msg1["sender"], "user", "Sender should see 'user'")
-        self.assertEqual(msg2["sender"], "other", "Receiver should see 'other'")
-
-        await comm_cliente.disconnect()
-        await comm_proveedor.disconnect()
-
-    async def test_empty_message_ignored(self):
-        """Empty or whitespace-only message is silently ignored."""
-        communicator, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
-
-        await communicator.send_json_to(
-            {
-                "action": "new_message",
-                "contenido": "   ",
-            }
-        )
-
-        import asyncio
-
-        with self.assertRaises(asyncio.TimeoutError):
-            await communicator.receive_json_from(timeout=2)
-
-        msg_count = await sync_to_async(Mensaje.objects.count)()
-        self.assertEqual(msg_count, 0)
-
-    async def test_invalid_json_ignored(self):
-        """Non-JSON text data is silently ignored."""
-        communicator, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
-
-        await communicator.send_to(text_data="not json at all")
-
-        import asyncio
-
-        with self.assertRaises(asyncio.TimeoutError):
-            await communicator.receive_json_from(timeout=2)
-
-    async def test_rate_limiting(self):
-        """Rate limit blocks excessive messages in the window."""
-        with patch.object(ChatConsumer, "WS_RATE_LIMIT", 3):
-            communicator, connected = await self.get_communicator(self.cliente)
-            self.assertTrue(connected)
-
-            for i in range(3):
-                await communicator.send_json_to(
-                    {
-                        "action": "new_message",
-                        "contenido": f"msg {i}",
-                    }
-                )
-                msg = await communicator.receive_json_from(timeout=5)
-                self.assertEqual(msg["text"], f"msg {i}")
-
-            # 4th message should be rate-limited
-            await communicator.send_json_to(
-                {
-                    "action": "new_message",
-                    "contenido": "too many",
-                }
-            )
-            error = await communicator.receive_json_from(timeout=5)
-            self.assertEqual(error["error"], "rate_limit")
-
-            await communicator.disconnect()
-
-    async def test_blocked_user_cannot_connect_ws(self):
-        """Blocked user cannot connect to WebSocket (close 4004)."""
-        from mensajeria.models import Bloqueo
-
-        await sync_to_async(Bloqueo.objects.create)(
-            usuario_bloqueador=self.cliente,
-            usuario_bloqueado=self.proveedor,
-            motivo="Spam",
-        )
-        communicator = WebsocketCommunicator(
-            ChatConsumer.as_asgi(),
-            f"/ws/mensajeria/{self.conv.id_conversacion}/",
-        )
-        communicator.scope["user"] = self.proveedor
-        communicator.scope["url_route"] = {
-            "kwargs": {"conversacion_id": str(self.conv.id_conversacion)}
-        }
-        connected, _ = await communicator.connect()
-        self.assertFalse(connected)
-
-    async def test_ws_delivery_updates_to_recibido(self):
-        """Connecting as recipient marks pending messages from the other user as 'recibido'."""
-        msg = await sync_to_async(Mensaje.objects.create)(
-            conversacion=self.conv,
-            emisor=self.cliente,
-            contenido="Hola",
+    def test_get_messages_marks_delivered(self):
+        """GET de mensajes: los pendientes del otro pasan de 'enviado' a 'recibido'."""
+        msg = Mensaje.objects.create(
+            conversacion=self.conv, emisor=self.cliente, receptor=self.proveedor, contenido="Hola"
         )
         self.assertEqual(msg.estado_entrega, "enviado")
 
-        communicator, connected = await self.get_communicator(self.proveedor)
-        self.assertTrue(connected)
+        self.api_client.force_authenticate(user=self.proveedor)
+        resp = self.api_client.get(self._url_mensajes())
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
-        await sync_to_async(msg.refresh_from_db)()
+        msg.refresh_from_db()
         self.assertEqual(msg.estado_entrega, "recibido")
-        await communicator.disconnect()
+
+    # ─── Archivar conversación ───
+
+    def test_archive_conversation(self):
+        """DELETE archiva la conversación (estado ARCHIVADA=10)."""
+        self.api_client.force_authenticate(user=self.cliente)
+        resp = self.api_client.delete(
+            f"/api/mensajeria/conversaciones/{self.conv.id_conversacion}/"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.conv.refresh_from_db()
+        from servicios.models.estado import ARCHIVADA
+
+        self.assertEqual(self.conv.estado_id, ARCHIVADA)

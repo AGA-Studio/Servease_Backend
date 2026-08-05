@@ -1,4 +1,4 @@
-"""Healthcheck endpoint — verifies DB, Redis, and Supabase connectivity."""
+"""Healthcheck endpoint — verifica DB y Supabase Auth."""
 from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
@@ -16,7 +16,7 @@ class HealthRateThrottle(UserRateThrottle):
 @permission_classes([AllowAny])
 @throttle_classes([HealthRateThrottle])
 def health(request):
-    """Return 200 if DB + Redis + Supabase are reachable, 503 otherwise."""
+    """Return 200 si DB y Supabase Auth están accesibles, 503 en otro caso."""
     status = 200
     checks = {}
 
@@ -31,21 +31,7 @@ def health(request):
         checks["database"] = str(exc)
         status = 503
 
-    # 2. Redis (channel layer)
-    try:
-        import redis as redis_mod
-
-        r = redis_mod.Redis.from_url(
-            settings.REDIS_URL, socket_timeout=2, decode_responses=True
-        )
-        r.ping()
-        r.connection_pool.disconnect()
-        checks["redis"] = "ok"
-    except Exception as exc:
-        checks["redis"] = str(exc)
-        status = 503
-
-    # 3. Supabase Auth
+    # 2. Supabase Auth
     try:
         import requests
 

@@ -70,12 +70,41 @@ class DeliveredStatusTests(TestCase):
         msg = Mensaje.objects.get(id_mensaje=resp.data["id"])
         self.assertEqual(msg.estado_entrega, "enviado")
 
-    # ─── WebSocket delivery updates estado_entrega to 'recibido' ───
+    # ─── GET de mensajes marca 'enviado' → 'recibido' (equivale al WS al conectar) ───
 
-    @unittest.skip("Implementado en test_websocket.py::test_ws_delivery_updates_to_recibido")
-    def test_ws_delivery_updates_to_recibido(self):
-        """When recipient connects via WS, message estado_entrega becomes 'recibido'."""
-        # Real WS test lives in test_websocket.py (needs TransactionTestCase infra)
+    def test_get_messages_marks_estado_recibido(self):
+        """GET de mensajes marca los pendientes del otro participante como 'recibido'."""
+        from mensajeria.models import Mensaje
+
+        conv = self._create_conversation()
+        msg = Mensaje.objects.create(
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Hola"
+        )
+        self.assertEqual(msg.estado_entrega, "enviado")
+
+        self.api_client.force_authenticate(user=self.proveedor)
+        resp = self.api_client.get(
+            f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        msg.refresh_from_db()
+        self.assertEqual(msg.estado_entrega, "recibido")
+
+    def test_get_messages_does_not_mark_own_as_recibido(self):
+        """Los propios mensajes no cambian de estado al leerlos."""
+        from mensajeria.models import Mensaje
+
+        conv = self._create_conversation()
+        msg = Mensaje.objects.create(
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Mio"
+        )
+        self.api_client.force_authenticate(user=self.cliente)
+        self.api_client.get(
+            f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/"
+        )
+        msg.refresh_from_db()
+        self.assertEqual(msg.estado_entrega, "enviado")
 
 
 # PYEOF

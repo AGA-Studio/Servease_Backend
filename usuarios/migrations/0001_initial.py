@@ -4,6 +4,81 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+
+SQL_BOOTSTRAP = '''
+-- ============================================================
+-- BOOTSTRAP de tablas no administradas (managed=False).
+-- El equipo las crea por SQL manual en Supabase; en entornos
+-- frescos (test DB / CI) deben existir para que las FKs de
+-- servicios/mensajeria/transacciones/calificaciones apliquen.
+-- IF NOT EXISTS: no-op en DBs existentes. Sin FKs a nivel BD.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS rol (
+    id_rol serial PRIMARY KEY,
+    nombre varchar(100) NOT NULL,
+    descripcion text NULL
+);
+
+CREATE TABLE IF NOT EXISTS categoria (
+    id_categoria serial PRIMARY KEY,
+    nombre varchar(100) NOT NULL,
+    descripcion text NULL
+);
+
+CREATE TABLE IF NOT EXISTS empresa (
+    id_empresa serial PRIMARY KEY,
+    nombre varchar(150) NOT NULL,
+    colonia varchar(150) NOT NULL,
+    calle varchar(150) NOT NULL,
+    cp varchar(10) NOT NULL,
+    num_int varchar(10) NULL,
+    num_ext varchar(10) NOT NULL,
+    estado varchar(50) NOT NULL,
+    contacto varchar(150) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sucursal (
+    id_sucursal serial PRIMARY KEY,
+    nombre varchar(150) NOT NULL,
+    colonia varchar(150) NOT NULL,
+    calle varchar(150) NOT NULL,
+    cp varchar(10) NOT NULL,
+    num_int varchar(10) NULL,
+    num_ext varchar(10) NOT NULL,
+    estado varchar(50) NOT NULL,
+    contacto varchar(150) NOT NULL,
+    id_empresa integer NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS usuario (
+    id_usuario uuid PRIMARY KEY,
+    nombre varchar(100) NOT NULL,
+    segundo_nombre varchar(100) NULL,
+    apellido_pa varchar(100) NOT NULL,
+    apellido_ma varchar(100) NULL,
+    correo varchar(254) NOT NULL UNIQUE,
+    celular varchar(20) NULL,
+    url_foto_perfil varchar(200) NULL,
+    descripcion_perfil text NULL,
+    fecha_registro timestamptz NOT NULL DEFAULT now(),
+    estado boolean NOT NULL DEFAULT true,
+    disponible boolean NOT NULL DEFAULT true,
+    id_rol integer NOT NULL,
+    id_categoria integer NULL,
+    id_empresa integer NULL
+);
+
+CREATE TABLE IF NOT EXISTS usuario_area_trabajo (
+    id bigserial PRIMARY KEY
+);
+'''
+
+
+def bootstrap_unmanaged(apps, schema_editor):
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute(SQL_BOOTSTRAP)
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -88,27 +163,5 @@ class Migration(migrations.Migration):
                 'db_table': 'sucursal',
             },
         ),
-        migrations.RunSQL(
-            sql="""
-            CREATE TABLE IF NOT EXISTS usuario (
-                id_usuario uuid NOT NULL,
-                nombre varchar(100) NOT NULL,
-                segundo_nombre varchar(100) NULL,
-                apellido_pa varchar(100) NOT NULL,
-                apellido_ma varchar(100) NULL,
-                correo varchar(254) NOT NULL,
-                celular varchar(20) NULL,
-                url_foto_perfil varchar(200) NULL,
-                descripcion_perfil text NULL,
-                fecha_registro timestamptz NOT NULL DEFAULT now(),
-                estado boolean NOT NULL DEFAULT true,
-                id_rol integer NOT NULL,
-                id_categoria integer NULL,
-                id_empresa integer NULL,
-                CONSTRAINT usuario_pkey PRIMARY KEY (id_usuario),
-                CONSTRAINT usuario_correo_key UNIQUE (correo)
-            );
-            """,
-            reverse_sql="DROP TABLE IF EXISTS usuario CASCADE;",
-        ),
-    ]
+    migrations.RunPython(bootstrap_unmanaged, migrations.RunPython.noop),
+]

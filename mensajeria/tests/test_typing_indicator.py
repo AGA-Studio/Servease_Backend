@@ -1,146 +1,97 @@
-"""Tests for typing indicator WebSocket events."""
+"""Tests del indicador de escritura (typing) vía REST + Supabase Realtime.
+
+Reemplaza los tests de typing del WebSocket: ahora ConversacionTypingView
+publica typing_start / typing_stop con publish_event sobre el canal.
+"""
 
 import uuid
+from unittest.mock import patch
 
-from asgiref.sync import sync_to_async
-from channels.testing import WebsocketCommunicator
-from django.test import TransactionTestCase
+from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient
 
-from mensajeria.consumers import ChatConsumer
 from mensajeria.models import Conversacion
 from usuarios.models import Rol, Usuario
 
 
-class TypingIndicatorTests(TransactionTestCase):
-    """Tests for typing_start / typing_stop WebSocket events."""
+class TypingIndicatorTests(TestCase):
+    """POST /typing/ publica typing_start / typing_stop."""
 
     def setUp(self):
-        super().setUp()
         self.rol_cliente = Rol.objects.create(id_rol=1, nombre="Cliente")
         self.rol_proveedor = Rol.objects.create(id_rol=2, nombre="Proveedor")
-        self.cliente_uuid = uuid.uuid4()
-        self.proveedor_uuid = uuid.uuid4()
         self.cliente = Usuario.objects.create(
-            id_usuario=self.cliente_uuid,
+            id_usuario=uuid.uuid4(),
             nombre="Cliente",
             apellido_pa="Test",
-            correo=f"__VG_WS_CLIENT_{self.cliente_uuid}__",
+            correo=f"__VG_TP_CLIENT_{uuid.uuid4()}__",
             rol=self.rol_cliente,
         )
         self.proveedor = Usuario.objects.create(
-            id_usuario=self.proveedor_uuid,
+            id_usuario=uuid.uuid4(),
             nombre="Proveedor",
             apellido_pa="Test",
-            correo=f"__VG_WS_PROV_{self.proveedor_uuid}__",
+            correo=f"__VG_TP_PROV_{uuid.uuid4()}__",
             rol=self.rol_proveedor,
         )
         self.conv = Conversacion.objects.create(
-            cliente=self.cliente,
-            proveedor=self.proveedor,
+            cliente=self.cliente, proveedor=self.proveedor
         )
+        self.api_client = APIClient()
+        self.url = f"/api/mensajeria/conversaciones/{self.conv.id_conversacion}/typing/"
 
-    async def get_communicator(self, user):
-        """Create a WebsocketCommunicator connected as the given user."""
-        app = ChatConsumer.as_asgi()
-        communicator = WebsocketCommunicator(
-            app,
-            f"/ws/mensajeria/{self.conv.id_conversacion}/",
-        )
-        communicator.scope["user"] = user
-        communicator.scope["url_route"] = {
-            "kwargs": {"conversacion_id": str(self.conv.id_conversacion)},
-        }
-        connected, _ = await communicator.connect()
-        return communicator, connected
+    def _publish(self, user, action):
+        self.api_client.force_authenticate(user=user)
+        with patch("mensajeria.views.publish_event") as mock_pub:
+            resp = self.api_client.post(self.url, {"action": action}, format="json")
+        return resp, mock_pub
 
-    async def test_typing_start_broadcasts_to_other_participant(self):
-        """typing_start event broadcasts to other participant in conversation."""
-        comm_cliente, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
+    def test_typing_start_publishes(self):
+        """action=start publica typing_start con user_id y user_name."""
+        resp, mock_pub = self._publish(self.cliente, "start")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
-        comm_proveedor, connected2 = await self.get_communicator(self.proveedor)
-        self.assertTrue(connected2)
+        mock_pub.assert_called_once()
+        conv_id, event, payload = mock_pub.call_args.args
+        self.assertEqual(conv_id, self.conv.id_conversacion)
+        self.assertEqual(event, "typing_start")
+        self.assertEqual(payload["user_id"], str(self.cliente.id_usuario))
+        self.assertEqual(payload["user_name"], "Cliente Test")
 
-        # Cliente sends typing_start
-        await comm_cliente.send_json_to(
-            {
-                "action": "typing_start",
-            }
-        )
+    def test_typing_stop_publishes(self):
+        """action=stop publica typing_stop."""
+        resp, mock_pub = self._publish(self.proveedor, "stop")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        mock_pub.assert_called_once()
+        _, event, payload = mock_pub.call_args.args
+        self.assertEqual(event, "typing_stop")
+        self.assertEqual(payload["user_id"], str(self.proveedor.id_usuario))
 
-        # Proveedor should receive typing indicator
-        msg = await comm_proveedor.receive_json_from(timeout=5)
-        self.assertEqual(msg["action"], "typing_start")
-        self.assertEqual(msg["user_id"], str(self.cliente.id_usuario))
-        self.assertEqual(msg["user_name"], "Cliente Test")
+    def test_typing_defaults_to_start(self):
+        """Sin action (o vacío) se publica typing_start."""
+        self.api_client.force_authenticate(user=self.cliente)
+        with patch("mensajeria.views.publish_event") as mock_pub:
+            resp = self.api_client.post(self.url, {}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        mock_pub.assert_called_once()
+        self.assertEqual(mock_pub.call_args.args[1], "typing_start")
 
-    async def test_typing_stop_broadcasts_to_other_participant(self):
-        """typing_stop event broadcasts to other participant."""
-        comm_cliente, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
+    def test_invalid_action_rejected(self):
+        """action inválido devuelve 400 y no publica nada."""
+        resp, mock_pub = self._publish(self.cliente, "flame")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_pub.assert_not_called()
 
-        comm_proveedor, connected2 = await self.get_communicator(self.proveedor)
-        self.assertTrue(connected2)
-
-        # Cliente sends typing_stop
-        await comm_cliente.send_json_to(
-            {
-                "action": "typing_stop",
-            }
-        )
-
-        # Proveedor should receive typing_stop
-        msg = await comm_proveedor.receive_json_from(timeout=5)
-        self.assertEqual(msg["action"], "typing_stop")
-        self.assertEqual(msg["user_id"], str(self.cliente.id_usuario))
-
-    async def test_typing_start_only_sent_to_other_participant(self):
-        """typing_start is NOT sent back to sender."""
-        comm_cliente, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
-
-        comm_proveedor, connected2 = await self.get_communicator(self.proveedor)
-        self.assertTrue(connected2)
-
-        await comm_cliente.send_json_to({"action": "typing_start"})
-
-        # Proveedor receives it
-        msg = await comm_proveedor.receive_json_from(timeout=5)
-        self.assertEqual(msg["action"], "typing_start")
-
-        # Cliente should NOT receive it back
-        import asyncio
-
-        with self.assertRaises(asyncio.TimeoutError):
-            await comm_cliente.receive_json_from(timeout=1)
-
-    async def test_typing_stop_only_sent_to_other_participant(self):
-        """typing_stop is NOT sent back to sender."""
-        comm_cliente, connected = await self.get_communicator(self.cliente)
-        self.assertTrue(connected)
-
-        comm_proveedor, connected2 = await self.get_communicator(self.proveedor)
-        self.assertTrue(connected2)
-
-        await comm_cliente.send_json_to({"action": "typing_stop"})
-
-        msg = await comm_proveedor.receive_json_from(timeout=5)
-        self.assertEqual(msg["action"], "typing_stop")
-
-        import asyncio
-
-        with self.assertRaises(asyncio.TimeoutError):
-            await comm_cliente.receive_json_from(timeout=1)
-
-    async def test_typing_events_ignored_for_non_participant(self):
-        """Non-participant cannot send typing events (connection rejected)."""
-        outsider_uuid = uuid.uuid4()
-        outsider = await sync_to_async(Usuario.objects.create)(
-            id_usuario=outsider_uuid,
+    def test_non_participant_forbidden(self):
+        """Un usuario fuera de la conversación no puede publicar typing (403)."""
+        outsider = Usuario.objects.create(
+            id_usuario=uuid.uuid4(),
             nombre="Outsider",
             apellido_pa="Test",
-            correo=f"__VG_WS_OUT_{outsider_uuid}__",
+            correo=f"__VG_TP_OUT_{uuid.uuid4()}__",
             rol=self.rol_cliente,
         )
-        _communicator, connected = await self.get_communicator(outsider)
-        self.assertFalse(connected)
+        resp, mock_pub = self._publish(outsider, "start")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        mock_pub.assert_not_called()

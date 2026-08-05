@@ -56,6 +56,7 @@ class MessagePaginationTests(TestCase):
             Mensaje.objects.create(
                 conversacion=conv,
                 emisor=self.cliente if i % 2 == 0 else self.proveedor,
+                receptor=self.proveedor if i % 2 == 0 else self.cliente,
                 contenido=f"Msg {i}",
             )
         self.api_client.force_authenticate(user=self.cliente)
@@ -77,7 +78,7 @@ class MessagePaginationTests(TestCase):
         conv = self._create_conversation()
         for i in range(30):
             Mensaje.objects.create(
-                conversacion=conv, emisor=self.cliente, contenido=f"Msg {i}"
+                conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido=f"Msg {i}"
             )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.get(
@@ -94,7 +95,7 @@ class MessagePaginationTests(TestCase):
         conv = self._create_conversation()
         for i in range(60):
             Mensaje.objects.create(
-                conversacion=conv, emisor=self.cliente, contenido=f"Msg {i}"
+                conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido=f"Msg {i}"
             )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.get(
@@ -116,7 +117,7 @@ class MessagePaginationTests(TestCase):
         conv = self._create_conversation()
         msgs = [
             Mensaje.objects.create(
-                conversacion=conv, emisor=self.cliente, contenido=f"Msg {i}"
+                conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido=f"Msg {i}"
             )
             for i in range(10)
         ]

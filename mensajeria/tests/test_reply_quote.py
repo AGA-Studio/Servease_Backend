@@ -103,7 +103,7 @@ class ReplyQuoteTests(TestCase):
         )
         self.api_client.force_authenticate(user=self.cliente)
         msg1 = Mensaje.objects.create(
-            conversacion=conv1, emisor=self.cliente, contenido="Msg 1"
+            conversacion=conv1, emisor=self.cliente, receptor=self.proveedor, contenido="Msg 1"
         )
         resp = self.api_client.post(
             f"/api/mensajeria/conversaciones/{conv2.id_conversacion}/mensajes/",
@@ -119,7 +119,7 @@ class ReplyQuoteTests(TestCase):
         conv = self._create_conversation()
         self.api_client.force_authenticate(user=self.cliente)
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="My msg"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="My msg"
         )
         resp = self.api_client.post(
             f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/",
@@ -138,10 +138,10 @@ class ReplyQuoteTests(TestCase):
         conv = self._create_conversation()
         self.api_client.force_authenticate(user=self.cliente)
         msg1 = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.proveedor, contenido="Reply", reply_to=msg1
+            conversacion=conv, emisor=self.proveedor, receptor=self.cliente, contenido="Reply", reply_to=msg1
         )
         resp = self.api_client.get(
             f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/"
@@ -159,10 +159,10 @@ class ReplyQuoteTests(TestCase):
         conv = self._create_conversation()
         self.api_client.force_authenticate(user=self.cliente)
         msg1 = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         msg2 = Mensaje.objects.create(
-            conversacion=conv, emisor=self.proveedor, contenido="Reply", reply_to=msg1
+            conversacion=conv, emisor=self.proveedor, receptor=self.cliente, contenido="Reply", reply_to=msg1
         )
         resp = self.api_client.get(
             f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/{msg2.id_mensaje}/"

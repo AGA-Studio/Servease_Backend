@@ -1,5 +1,3 @@
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.core.files.storage import default_storage
 from django.db.models import Q
 from django.http import FileResponse, Http404
@@ -12,17 +10,17 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from mensajeria.models import Bloqueo, Conversacion, Mensaje
+from mensajeria.models import Conversacion, Mensaje
 from mensajeria.permissions import IsEmisor, IsParticipant
+from mensajeria.realtime import publish_event
 from mensajeria.serializers import (
-    BloqueoSerializer,
     ConversacionDetailSerializer,
     ConversacionListSerializer,
     CreateConversacionSerializer,
     CreateMensajeSerializer,
     MensajeSerializer,
 )
-from usuarios.models import Usuario
+from servicios.models.estado import ACTIVA, ARCHIVADA
 
 
 class ConversacionListCreateView(APIView):
@@ -35,7 +33,7 @@ class ConversacionListCreateView(APIView):
         q = request.query_params.get("q", "").strip()
         conversations = Conversacion.objects.filter(
             Q(cliente=request.user) | Q(proveedor=request.user),
-            estado="activa",
+            estado_id=ACTIVA,
         )
         if q:
             conversations = conversations.filter(
@@ -99,12 +97,46 @@ class ConversacionDetailView(APIView):
     def delete(self, request, id_conversacion):
         conversacion = get_object_or_404(Conversacion, pk=id_conversacion)
         self.check_object_permissions(request, conversacion)
-        conversacion.estado = "archivada"
+        conversacion.estado_id = ARCHIVADA
         conversacion.save(update_fields=["estado"])
         return Response(
             {"detail": "Conversacion archivada."},
             status=status.HTTP_200_OK,
         )
+
+
+class ConversacionTypingView(APIView):
+    """POST: publica indicadores de escritura via Supabase Realtime.
+
+    Body: {"action": "start" | "stop"}
+    """
+
+    permission_classes = (
+        IsAuthenticated,
+        IsParticipant,
+    )
+
+    def post(self, request, id_conversacion):
+        conversacion = get_object_or_404(Conversacion, pk=id_conversacion)
+        self.check_object_permissions(request, conversacion)
+
+        action = request.data.get("action", "start")
+        if action not in ("start", "stop"):
+            return Response(
+                {"detail": "action debe ser 'start' o 'stop'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        publish_event(
+            conversacion.id_conversacion,
+            f"typing_{action}",
+            {
+                "conversacion_id": conversacion.id_conversacion,
+                "user_id": str(request.user.id_usuario),
+                "user_name": f"{request.user.nombre} {request.user.apellido_pa}",
+            },
+        )
+        return Response({"detail": f"typing_{action} publicado."})
 
 
 class MensajeListCreateView(APIView):
@@ -124,6 +156,15 @@ class MensajeListCreateView(APIView):
     def get(self, request, id_conversacion):
         conversacion = get_object_or_404(Conversacion, pk=id_conversacion)
         self.check_object_permissions(request, conversacion)
+
+        # Al leer la conversación, los mensajes pendientes del otro
+        # participante pasan de "enviado" a "recibido" (equivalente al
+        # marcado que hacía el WebSocket al conectarse).
+        Mensaje.objects.filter(
+            conversacion=conversacion,
+            estado_entrega="enviado",
+            deleted_at__isnull=True,
+        ).exclude(emisor=request.user).update(estado_entrega="recibido")
 
         before_id = request.query_params.get("before")
         messages = Mensaje.objects.filter(
@@ -150,19 +191,6 @@ class MensajeListCreateView(APIView):
         serializer = CreateMensajeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Check if user is blocked
-        if Bloqueo.objects.filter(
-            Q(usuario_bloqueador=conversacion.cliente, usuario_bloqueado=request.user)
-            | Q(
-                usuario_bloqueador=conversacion.proveedor,
-                usuario_bloqueado=request.user,
-            )
-        ).exists():
-            return Response(
-                {"detail": "No puedes enviar mensajes en esta conversación."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         validated = serializer.validated_data
         reply_to_id = validated.get("reply_to")
 
@@ -178,9 +206,17 @@ class MensajeListCreateView(APIView):
                 )
 
         tipo = "archivo" if validated.get("archivo") else "texto"
+        # receptor = el otro participante de la conversación (requerido por el
+        # trigger remoto notificar_nuevo_mensaje() y la vista vista_conversaciones).
+        receptor = (
+            conversacion.proveedor
+            if request.user.id_usuario == conversacion.cliente_id
+            else conversacion.cliente
+        )
         mensaje = Mensaje.objects.create(
             conversacion=conversacion,
             emisor=request.user,
+            receptor=receptor,
             contenido=validated.get("contenido", ""),
             archivo=validated.get("archivo"),
             reply_to=reply_to,
@@ -188,6 +224,13 @@ class MensajeListCreateView(APIView):
         )
 
         result = MensajeSerializer(mensaje, context={"request": request}).data
+        result["emisor_id"] = str(request.user.id_usuario)
+
+        publish_event(
+            conversacion.id_conversacion,
+            "new_message",
+            result,
+        )
         return Response(result, status=status.HTTP_201_CREATED)
 
 
@@ -223,7 +266,8 @@ class MensajeDetailView(APIView):
         serializer.is_valid(raise_exception=True)
 
         mensaje.contenido = serializer.validated_data["contenido"]
-        mensaje.save(update_fields=["contenido"])
+        mensaje.editado = True
+        mensaje.save(update_fields=["contenido", "editado"])
 
         result = MensajeSerializer(mensaje, context={"request": request}).data
         return Response(result)
@@ -264,18 +308,15 @@ class MarcarLeidoView(APIView):
             .update(leido=True)
         )
 
-        # Broadcast read_receipt via WebSocket
-        channel_layer = get_channel_layer()
-        if channel_layer:
-            async_to_sync(channel_layer.group_send)(
-                f"chat_{conversacion.id_conversacion}",
-                {
-                    "type": "read_receipt",
-                    "conversacion_id": str(conversacion.id_conversacion),
-                    "reader_id": str(request.user.id_usuario),
-                    "count": count,
-                },
-            )
+        publish_event(
+            conversacion.id_conversacion,
+            "read_receipt",
+            {
+                "conversacion_id": conversacion.id_conversacion,
+                "reader_id": str(request.user.id_usuario),
+                "count": count,
+            },
+        )
 
         return Response({"count": count})
 
@@ -304,69 +345,3 @@ class MensajeArchivoView(APIView):
             f'attachment; filename="{mensaje.archivo.name}"'
         )
         return response
-
-
-class BloqueoListCreateView(APIView):
-    """POST: block a user. GET: list blocked users."""
-
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        bloqueado_id = request.data.get("bloqueado_id")
-        _motivo = request.data.get("motivo", "")  # stored in serializer
-
-        if not bloqueado_id:
-            return Response(
-                {"detail": "bloqueado_id es requerido."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if str(request.user.id_usuario) == str(bloqueado_id):
-            return Response(
-                {"detail": "No puedes bloquearte a ti mismo."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            Usuario.objects.get(id_usuario=bloqueado_id)
-        except Usuario.DoesNotExist:
-            return Response(
-                {"detail": "Usuario no encontrado."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Check if already blocked
-        if Bloqueo.objects.filter(
-            usuario_bloqueador=request.user, usuario_bloqueado_id=bloqueado_id
-        ).exists():
-            return Response(
-                {"detail": "Este usuario ya está bloqueado."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        bloqueo = Bloqueo.objects.create(
-            usuario_bloqueador=request.user,
-            usuario_bloqueado_id=bloqueado_id,
-            motivo=request.data.get("motivo", ""),
-        )
-        serializer = BloqueoSerializer(bloqueo)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    def get(self, request):
-        bloqueos = Bloqueo.objects.filter(
-            usuario_bloqueador=request.user
-        ).select_related("usuario_bloqueado")
-        serializer = BloqueoSerializer(bloqueos, many=True)
-        return Response(serializer.data)
-
-
-class BloqueoDetailView(APIView):
-    """DELETE: unblock a user."""
-
-    permission_classes = (IsAuthenticated,)
-
-    def delete(self, request, id_bloqueo):
-        bloqueo = get_object_or_404(
-            Bloqueo, pk=id_bloqueo, usuario_bloqueador=request.user
-        )
-        bloqueo.delete()
-        return Response({"detail": "Usuario desbloqueado."}, status=status.HTTP_200_OK)

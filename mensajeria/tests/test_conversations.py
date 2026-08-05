@@ -174,12 +174,13 @@ class ConversationTests(TestCase):
     def test_list_conversations_only_active(self):
         """GET only returns active (not archived) conversations."""
         from mensajeria.models import Conversacion
+        from servicios.models.estado import ACTIVA, ARCHIVADA
 
         conv = Conversacion.objects.create(
-            cliente=self.cliente, proveedor=self.proveedor, estado="activa"
+            cliente=self.cliente, proveedor=self.proveedor, estado_id=ACTIVA
         )
         Conversacion.objects.create(
-            cliente=self.cliente, proveedor=self.proveedor2, estado="archivada"
+            cliente=self.cliente, proveedor=self.proveedor2, estado_id=ARCHIVADA
         )
         self.client.force_authenticate(user=self.cliente)
         resp = self.client.get("/api/mensajeria/conversaciones/")
@@ -243,6 +244,7 @@ class ConversationTests(TestCase):
     def test_conversation_detail(self):
         """GET returns conversation detail with both users."""
         from mensajeria.models import Conversacion
+        from servicios.models.estado import ARCHIVADA
 
         conv = Conversacion.objects.create(
             cliente=self.cliente, proveedor=self.proveedor
@@ -295,6 +297,7 @@ class ConversationTests(TestCase):
     def test_archive_conversation(self):
         """DELETE archives a conversation (sets estado='archivada')."""
         from mensajeria.models import Conversacion
+        from servicios.models.estado import ARCHIVADA
 
         conv = Conversacion.objects.create(
             cliente=self.cliente, proveedor=self.proveedor
@@ -305,7 +308,7 @@ class ConversationTests(TestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         conv.refresh_from_db()
-        self.assertEqual(conv.estado, "archivada")
+        self.assertEqual(conv.estado_id, ARCHIVADA)
 
     def test_archive_conversation_non_participant_forbidden(self):
         """DELETE by non-participant returns 403."""

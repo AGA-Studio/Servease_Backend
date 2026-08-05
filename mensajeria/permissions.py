@@ -1,4 +1,3 @@
-from django.db.models import Q
 from rest_framework.permissions import BasePermission
 
 
@@ -20,14 +19,6 @@ class IsParticipant(BasePermission):
         if not user or not user.is_authenticated:
             return False
         conversacion = getattr(obj, "conversacion", obj)
-        # Check if user is blocked in this conversation
-        from mensajeria.models import Bloqueo
-
-        if Bloqueo.objects.filter(
-            Q(usuario_bloqueador=conversacion.cliente, usuario_bloqueado=user)
-            | Q(usuario_bloqueador=conversacion.proveedor, usuario_bloqueado=user)
-        ).exists():
-            return False
         return str(conversacion.cliente_id) == str(user.id_usuario) or str(
             conversacion.proveedor_id
         ) == str(user.id_usuario)

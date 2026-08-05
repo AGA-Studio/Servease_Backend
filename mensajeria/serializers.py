@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
-from mensajeria.models import Bloqueo, Conversacion, Mensaje
+from mensajeria.models import Conversacion, Mensaje
+from servicios.models.estado import ACTIVA
 from usuarios.models import Usuario
 
 
@@ -211,7 +212,7 @@ class CreateConversacionSerializer(serializers.Serializer):
             cliente=request.user,
             proveedor_id=proveedor_id,
             servicio=attrs["servicio"],
-            estado="activa",
+            estado_id=ACTIVA,
         ).first()
         if existing:
             attrs["existing"] = existing
@@ -284,32 +285,3 @@ class CreateMensajeSerializer(serializers.Serializer):
                     "El mensaje al que respondes no existe."
                 )
         return value
-
-
-class BloqueoSerializer(serializers.ModelSerializer):
-    bloqueador = serializers.UUIDField(
-        source="usuario_bloqueador.id_usuario", read_only=True
-    )
-    bloqueado = serializers.UUIDField(
-        source="usuario_bloqueado.id_usuario", read_only=True
-    )
-    bloqueado_id = serializers.UUIDField(
-        write_only=True, source="usuario_bloqueado.id_usuario"
-    )
-
-    class Meta:
-        model = Bloqueo
-        fields = (
-            "id",
-            "bloqueador",
-            "bloqueado",
-            "bloqueado_id",
-            "motivo",
-            "fecha",
-        )
-        read_only_fields = (
-            "id",
-            "bloqueador",
-            "bloqueado",
-            "fecha",
-        )

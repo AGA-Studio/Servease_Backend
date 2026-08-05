@@ -72,12 +72,12 @@ class MessageTests(TestCase):
         from mensajeria.models import Mensaje
 
         conv = self._create_conversation()
-        Mensaje.objects.create(conversacion=conv, emisor=self.cliente, contenido="Hola")
+        Mensaje.objects.create(conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Hola")
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.proveedor, contenido="Hola!"
+            conversacion=conv, emisor=self.proveedor, receptor=self.cliente, contenido="Hola!"
         )
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Como estas?"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Como estas?"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.get(
@@ -96,13 +96,13 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Msg 1"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Msg 1"
         )
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.proveedor, contenido="Msg 2"
+            conversacion=conv, emisor=self.proveedor, receptor=self.cliente, contenido="Msg 2"
         )
         m3 = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Msg 3"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Msg 3"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.get(
@@ -131,7 +131,7 @@ class MessageTests(TestCase):
         from mensajeria.models import Mensaje
 
         conv = self._create_conversation()
-        Mensaje.objects.create(conversacion=conv, emisor=self.cliente, contenido="Test")
+        Mensaje.objects.create(conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Test")
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.get(
             f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/"
@@ -153,10 +153,10 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="My msg"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="My msg"
         )
         Mensaje.objects.create(
-            conversacion=conv, emisor=self.proveedor, contenido="Their msg"
+            conversacion=conv, emisor=self.proveedor, receptor=self.cliente, contenido="Their msg"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.get(
@@ -298,7 +298,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Test message"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Test message"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.get(
@@ -329,7 +329,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Test"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Test"
         )
         self.api_client.force_authenticate(user=self.cliente2)
         resp = self.api_client.get(
@@ -343,7 +343,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Test"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Test"
         )
         resp = self.api_client.get(
             f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/{msg.id_mensaje}/"
@@ -356,7 +356,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.proveedor, contenido="From provider"
+            conversacion=conv, emisor=self.proveedor, receptor=self.cliente, contenido="From provider"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.get(
@@ -374,7 +374,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.patch(
@@ -395,7 +395,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         self.api_client.force_authenticate(user=self.proveedor)
         resp = self.api_client.patch(
@@ -414,7 +414,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.patch(
@@ -430,7 +430,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.patch(
@@ -446,7 +446,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.patch(
@@ -462,7 +462,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         self.api_client.force_authenticate(user=self.cliente)
         resp = self.api_client.patch(
@@ -489,7 +489,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         self.api_client.force_authenticate(user=self.cliente2)
         resp = self.api_client.patch(
@@ -505,7 +505,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="Original"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="Original"
         )
         resp = self.api_client.patch(
             f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/{msg.id_mensaje}/",
@@ -522,7 +522,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="To delete"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="To delete"
         )
         msg_id = msg.id_mensaje
         self.api_client.force_authenticate(user=self.cliente)
@@ -539,7 +539,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="To delete"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="To delete"
         )
         self.api_client.force_authenticate(user=self.proveedor)
         resp = self.api_client.delete(
@@ -563,7 +563,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="To delete"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="To delete"
         )
         self.api_client.force_authenticate(user=self.cliente2)
         resp = self.api_client.delete(
@@ -577,7 +577,7 @@ class MessageTests(TestCase):
 
         conv = self._create_conversation()
         msg = Mensaje.objects.create(
-            conversacion=conv, emisor=self.cliente, contenido="To delete"
+            conversacion=conv, emisor=self.cliente, receptor=self.proveedor, contenido="To delete"
         )
         resp = self.api_client.delete(
             f"/api/mensajeria/conversaciones/{conv.id_conversacion}/mensajes/{msg.id_mensaje}/"

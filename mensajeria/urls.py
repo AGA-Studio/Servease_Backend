@@ -24,24 +24,18 @@ urlpatterns = [
         name="marcar-leido",
     ),
     path(
+        "conversaciones/<int:id_conversacion>/typing/",
+        views.ConversacionTypingView.as_view(),
+        name="conversacion-typing",
+    ),
+    path(
         "conversaciones/<int:id_conversacion>/mensajes/<int:id_mensaje>/",
         views.MensajeDetailView.as_view(),
         name="mensaje-detail",
     ),
-    # New endpoints
     path(
         "mensajes/<int:id_mensaje>/archivo/",
         views.MensajeArchivoView.as_view(),
         name="mensaje-archivo",
-    ),
-    path(
-        "bloquear/",
-        views.BloqueoListCreateView.as_view(),
-        name="bloqueo-list-create",
-    ),
-    path(
-        "bloquear/<int:id_bloqueo>/",
-        views.BloqueoDetailView.as_view(),
-        name="bloqueo-detail",
     ),
 ]

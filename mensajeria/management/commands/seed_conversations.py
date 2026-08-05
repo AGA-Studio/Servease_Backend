@@ -85,6 +85,7 @@ class Command(BaseCommand):
                 msg = Mensaje.objects.create(
                     conversacion=conv,
                     emisor=cliente if is_cliente else proveedor,
+                    receptor=proveedor if is_cliente else cliente,
                     contenido=texto,
                     fecha=tz - timezone.timedelta(hours=len(conv_data["mensajes"]) - i),
                     leido=True,
