@@ -223,6 +223,11 @@ class MensajeListCreateView(APIView):
             tipo_mensaje=tipo,
         )
 
+        preview = mensaje.contenido[:200] if mensaje.contenido else "📎 Archivo adjunto"
+        conversacion.ultimo_mensaje_preview = preview
+        conversacion.ultimo_mensaje_fecha = mensaje.fecha
+        conversacion.save(update_fields=["ultimo_mensaje_preview", "ultimo_mensaje_fecha"])
+
         result = MensajeSerializer(mensaje, context={"request": request}).data
         result["emisor_id"] = str(request.user.id_usuario)
 
