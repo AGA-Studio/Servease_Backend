@@ -34,9 +34,9 @@ class UsuarioSerializer(serializers.ModelSerializer):
         model = Usuario
         fields = [
             'id_usuario', 'nombre', 'segundo_nombre', 'apellido_pa',
-            'apellido_ma', 'correo', 'celular', 'url_foto_perfil',
-            'descripcion_perfil', 'fecha_registro', 'estado', 'rol',
-            'id_categoria', 'id_categorias', 'id_empresa',
+            'apellido_ma', 'correo', 'celular', 'fecha_nacimiento',
+            'url_foto_perfil', 'descripcion_perfil', 'fecha_registro',
+            'estado', 'rol', 'id_categoria', 'id_categorias', 'id_empresa',
         ]
 
     def get_rol(self, obj):
@@ -57,6 +57,7 @@ class SignupSerializer(serializers.Serializer):
     apellido_ma = serializers.CharField(
         max_length=100, required=False, allow_blank=True
     )
+    fecha_nacimiento = serializers.DateField()
     photo = serializers.ImageField(required=False, allow_null=True)
 
 

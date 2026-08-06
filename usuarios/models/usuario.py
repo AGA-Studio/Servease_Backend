@@ -13,6 +13,7 @@ class Usuario(models.Model):
     apellido_ma = models.CharField(max_length=100, blank=True, null=True)
     correo = models.EmailField(max_length=254, unique=True)
     celular = models.CharField(max_length=20, blank=True, null=True)
+    fecha_nacimiento = models.DateField(blank=True, null=True)
     url_foto_perfil = models.URLField(blank=True, null=True)
     descripcion_perfil = models.TextField(blank=True, null=True)
     fecha_registro = models.DateTimeField(auto_now_add=True)

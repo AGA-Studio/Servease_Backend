@@ -429,6 +429,7 @@ class SignupView(APIView):
                 segundo_nombre=data.get('segundo_nombre') or None,
                 apellido_pa=data['apellido_pa'],
                 apellido_ma=data.get('apellido_ma') or None,
+                fecha_nacimiento=data['fecha_nacimiento'],
                 correo=data['email'],
                 rol_id=1,
                 estado=False,
