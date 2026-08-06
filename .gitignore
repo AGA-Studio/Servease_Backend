@@ -24,3 +24,15 @@ staticfiles/
 
 # EndPoints
 #API_ENDPOINTS.md
+api.md
+
+# Tooling personal del agente (NO trackear)
+.omo/
+.opencode/
+.playwright-mcp/
+
+# Config local / plantillas locales (no enviar)
+.env.example
+.dockerignore
+supabase/
+docs/

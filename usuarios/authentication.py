@@ -39,3 +39,20 @@ class SupabaseAuthentication(BaseAuthentication):
             )
 
         return (usuario, token)
+
+
+# drf-spectacular: expone SupabaseAuthentication como esquema bearerAuth
+# para que Swagger UI muestre el botón "Authorize".
+from drf_spectacular.extensions import OpenApiAuthenticationExtension  # noqa: E402
+
+
+class SupabaseBearerScheme(OpenApiAuthenticationExtension):
+    target_class = "usuarios.authentication.SupabaseAuthentication"
+    name = "bearerAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
