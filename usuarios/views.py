@@ -597,15 +597,18 @@ class TrabajosAplicadosCardsView(TrabajosAplicadosView):
 
 class TrabajosDisponiblesView(ListAPIView):
     """
-    Trabajos disponibles para el proveedor logueado, filtrados por
-    sus areas de trabajo. Filtros opcionales via query params:
+    Trabajos disponibles para el proveedor logueado, paginados y filtrados
+    por sus areas de trabajo. Filtros opcionales via query params:
       ?categoria_id=1        (una categoria especifica dentro de sus areas)
       ?precio_min=100
       ?precio_max=500
+      ?page=2
+      ?page_size=10          (max 50)
     """
     permission_classes = [IsAuthenticated, IsProviderRole]
     serializer_class = TrabajoDisponibleSerializer
- 
+    pagination_class = MisPublicacionesPagination
+
     def get_queryset(self):
         areas = self.request.user.areas_trabajo.values_list('id_categoria', flat=True)
         queryset = VistaTrabajosDisponibles.objects.filter(categoria_id__in=areas)
