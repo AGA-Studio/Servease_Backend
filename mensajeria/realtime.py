@@ -26,7 +26,7 @@ async def _broadcast_async(channel_name: str, event: str, payload: dict) -> None
     client = await create_async_client(
         settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY
     )
-    channel = client.channel(channel_name)
+    channel = client.channel(channel_name, {"config": {"private": True}})
     try:
         await channel.subscribe()
         await channel.send_broadcast(event=event, data=payload)

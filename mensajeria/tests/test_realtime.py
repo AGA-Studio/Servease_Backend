@@ -14,8 +14,9 @@ from mensajeria import realtime
 
 
 class FakeChannel:
-    def __init__(self, name):
+    def __init__(self, name, params=None):
         self.name = name
+        self.params = params
         self.subscribed = False
         self.sent = None
 
@@ -31,8 +32,8 @@ class FakeClient:
         self.channels = []
         self.removed = None
 
-    def channel(self, name):
-        ch = FakeChannel(name)
+    def channel(self, name, params=None):
+        ch = FakeChannel(name, params)
         self.channels.append(ch)
         return ch
 
@@ -55,6 +56,7 @@ class BroadcastAsyncTests(SimpleTestCase):
         self.assertEqual(len(client.channels), 1)
         channel = client.channels[0]
         self.assertEqual(channel.name, "conversacion-42")
+        self.assertEqual(channel.params, {"config": {"private": True}}, "canal debe ser privado")
         self.assertTrue(channel.subscribed, "debe suscribirse al canal")
         self.assertEqual(channel.sent, ("new_message", {"text": "hola"}))
         self.assertIs(client.removed, channel, "debe liberar el canal al terminar")
