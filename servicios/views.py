@@ -29,7 +29,7 @@ from mensajeria.models import Conversacion
 from transacciones.models import Transaccion
 from usuarios.permissions import IsClientRole, IsProviderRole
 from .models import Oferta, Postulacion, Servicio, VistaInfoAplicantes, VistaPostDetails
-from .models.estado import ABIERTO, CANCELADO, PENDIENTE
+from .models.estado import ABIERTO, ACEPTADO, CANCELADO, PENDIENTE
 
 from .serializers import (
     CalificarServicioSerializer,
@@ -129,7 +129,7 @@ class MisTrabajosView(ListAPIView):
             Postulacion.objects
             .filter(
                 proveedor_id=self.request.user.id_usuario,
-                estado__in=['pendiente', 'aceptada'],
+                estado_id__in=[PENDIENTE, ACEPTADO],
             )
             .select_related('servicio', 'servicio__categoria', 'servicio__tipo_cambio')
             .order_by('-fecha')
