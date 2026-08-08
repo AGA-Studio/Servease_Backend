@@ -1,11 +1,13 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.db.models import Avg
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
+from calificaciones.models import Calificacion
 from usuarios.models import Categoria
-from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado,VistaConversaciones  
-from .models.estado import ABIERTO, CANCELADO, PENDIENTE
+from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado,VistaConversaciones
+from .models.estado import ABIERTO, CANCELADO, PENDIENTE, ACEPTADO
 
 # Bounding box del área urbana de Tijuana (excluye Tecate, Rosarito, Ensenada).
 # Es un rectángulo aproximado, no el polígono real del municipio.
@@ -185,9 +187,39 @@ class InfoAplicanteSerializer(serializers.ModelSerializer):
 
 
 class PostDetailsSerializer(serializers.ModelSerializer):
+    """Detalle de un servicio. `proveedor_asignado` es el proveedor con
+    postulación aceptada (si ya hay uno) — usado por el cliente para ver el
+    perfil del proveedor asignado, análogo a como el proveedor ve al cliente
+    dueño del servicio."""
+
+    proveedor_asignado = serializers.SerializerMethodField()
+
     class Meta:
         model = VistaPostDetails
         fields = '__all__'
+
+    def get_proveedor_asignado(self, obj):
+        postulacion = (
+            Postulacion.objects
+            .filter(servicio_id=obj.id_servicio, estado_id=ACEPTADO)
+            .select_related('proveedor')
+            .first()
+        )
+        if not postulacion:
+            return None
+        proveedor = postulacion.proveedor
+        avg = Calificacion.objects.filter(
+            evaluado_id=proveedor.id_usuario
+        ).aggregate(avg=Avg('puntuacion'))['avg']
+        return {
+            'id_usuario': str(proveedor.id_usuario),
+            'nombre': f'{proveedor.nombre} {proveedor.apellido_pa}',
+            'url_foto_perfil': proveedor.url_foto_perfil,
+            'rating': round(avg, 1) if avg is not None else None,
+            'num_reviews': Calificacion.objects.filter(
+                evaluado_id=proveedor.id_usuario
+            ).count(),
+        }
 
 # Falto el serializer para la lista de servicios, que incluye el nombre de la categoría asociada a cada servicio.
 class ServicioListSerializer(serializers.ModelSerializer):

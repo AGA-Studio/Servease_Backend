@@ -169,7 +169,7 @@ class NotificacionSerializer(serializers.ModelSerializer):
         model = Notificacion
         fields = [
             'id_notificacion', 'id_usuario', 'tipo', 'titulo', 'contenido',
-            'leido', 'fecha', 'referencia_tabla', 'referencia_id',
+            'leido', 'fecha', 'referencia_tabla', 'referencia_id', 'contexto_rol',
         ]
 
 #Portafolio Proveedor Serializer

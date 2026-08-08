@@ -1,5 +1,7 @@
+from django.db.models import Avg
 from rest_framework import serializers
 
+from calificaciones.models import Calificacion
 from mensajeria.models import Conversacion, Mensaje
 from servicios.models.estado import ACTIVA
 from usuarios.models import Usuario
@@ -8,6 +10,9 @@ from usuarios.models import Usuario
 class UsuarioMinimoSerializer(serializers.ModelSerializer):
     """Minimal user info for conversation detail."""
 
+    rating = serializers.SerializerMethodField()
+    num_reviews = serializers.SerializerMethodField()
+
     class Meta:
         model = Usuario
         fields = (
@@ -15,7 +20,18 @@ class UsuarioMinimoSerializer(serializers.ModelSerializer):
             "nombre",
             "apellido_pa",
             "url_foto_perfil",
+            "rating",
+            "num_reviews",
         )
+
+    def get_rating(self, obj):
+        avg = Calificacion.objects.filter(evaluado_id=obj.id_usuario).aggregate(
+            avg=Avg("puntuacion")
+        )["avg"]
+        return round(avg, 1) if avg is not None else None
+
+    def get_num_reviews(self, obj):
+        return Calificacion.objects.filter(evaluado_id=obj.id_usuario).count()
 
 
 class ServicioMinimoSerializer(serializers.Serializer):
@@ -23,6 +39,8 @@ class ServicioMinimoSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(source="id_servicio")
     titulo = serializers.CharField()
+    fecha = serializers.DateTimeField()
+    categoria = serializers.CharField(source="categoria.nombre", default=None)
 
 
 class ConversacionListSerializer(serializers.ModelSerializer):
@@ -38,6 +56,9 @@ class ConversacionListSerializer(serializers.ModelSerializer):
     lastMessagePreview = serializers.CharField(source="ultimo_mensaje_preview")
     timeAgoKey = serializers.SerializerMethodField()
     unreadCount = serializers.IntegerField(source="unread_count", read_only=True)
+    servicio_titulo = serializers.CharField(source="servicio.titulo", default=None, read_only=True)
+    cliente_id = serializers.UUIDField(read_only=True)
+    proveedor_id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = Conversacion
@@ -49,6 +70,10 @@ class ConversacionListSerializer(serializers.ModelSerializer):
             "lastMessagePreview",
             "timeAgoKey",
             "unreadCount",
+            "servicio_id",
+            "servicio_titulo",
+            "cliente_id",
+            "proveedor_id",
         )
 
     def _get_other_user(self, obj):
@@ -96,6 +121,8 @@ class ConversacionDetailSerializer(serializers.ModelSerializer):
     cliente = UsuarioMinimoSerializer(read_only=True)
     proveedor = UsuarioMinimoSerializer(read_only=True)
     servicio = ServicioMinimoSerializer(read_only=True)
+    cliente_id = serializers.UUIDField(read_only=True)
+    proveedor_id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = Conversacion
@@ -106,6 +133,8 @@ class ConversacionDetailSerializer(serializers.ModelSerializer):
             "cliente",
             "proveedor",
             "servicio",
+            "cliente_id",
+            "proveedor_id",
         )
 
 
