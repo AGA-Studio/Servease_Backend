@@ -600,6 +600,7 @@ class IniciarPagoView(APIView):
             {
                 'id_transaccion': transaccion.id_transaccion,
                 'monto': transaccion.monto,
+                'moneda': moneda.upper(),
                 'estado': transaccion.estado,
                 'client_secret': intent.client_secret,
             },
@@ -623,7 +624,9 @@ class PagoPendienteView(APIView):
                 'No puedes ver el pago de un servicio que no es tuyo.'
             )
 
-        transaccion = Transaccion.objects.filter(
+        transaccion = Transaccion.objects.select_related(
+            'servicio__tipo_cambio'
+        ).filter(
             servicio_id=id_servicio, cliente_id=request.user.id_usuario,
             metodo_pago='tarjeta', estado='pendiente',
             stripe_payment_intent_id__isnull=False,
@@ -647,6 +650,10 @@ class PagoPendienteView(APIView):
         return Response({
             'id_transaccion': transaccion.id_transaccion,
             'monto': transaccion.monto,
+            'moneda': (
+                transaccion.servicio.tipo_cambio.nombre
+                if transaccion.servicio.tipo_cambio_id else 'MXN'
+            ),
             'client_secret': intent.client_secret,
         })
 
@@ -671,7 +678,7 @@ class PagoPendienteClienteView(APIView):
                 metodo_pago='tarjeta', estado__in=['pendiente', 'rechazada'],
                 stripe_payment_intent_id__isnull=False,
             )
-            .select_related('servicio')
+            .select_related('servicio__tipo_cambio')
             .order_by('-fecha')
             .first()
         )
@@ -694,6 +701,10 @@ class PagoPendienteClienteView(APIView):
             'titulo': transaccion.servicio.titulo,
             'id_transaccion': transaccion.id_transaccion,
             'monto': transaccion.monto,
+            'moneda': (
+                transaccion.servicio.tipo_cambio.nombre
+                if transaccion.servicio.tipo_cambio_id else 'MXN'
+            ),
             'client_secret': intent.client_secret,
         })
 
@@ -758,6 +769,7 @@ class PagoEstadoView(APIView):
 
         transaccion = (
             Transaccion.objects
+            .select_related('servicio__tipo_cambio')
             .filter(servicio_id=id_servicio, metodo_pago='tarjeta')
             .order_by('-fecha')
             .first()
@@ -767,6 +779,11 @@ class PagoEstadoView(APIView):
 
         return Response({
             'id_transaccion': transaccion.id_transaccion,
+            'monto': transaccion.monto,
+            'moneda': (
+                transaccion.servicio.tipo_cambio.nombre
+                if transaccion.servicio.tipo_cambio_id else 'MXN'
+            ),
             'estado': transaccion.estado,
         })
 
@@ -786,7 +803,7 @@ class PagoEnCursoProveedorView(APIView):
             Transaccion.objects
             .filter(proveedor_id=request.user.id_usuario, metodo_pago='tarjeta')
             .exclude(servicio__estado_id=COMPLETADO)
-            .select_related('servicio')
+            .select_related('servicio__tipo_cambio')
             .order_by('-fecha')
             .first()
         )
@@ -796,6 +813,11 @@ class PagoEnCursoProveedorView(APIView):
         return Response({
             'id_servicio': transaccion.servicio_id,
             'id_transaccion': transaccion.id_transaccion,
+            'monto': transaccion.monto,
+            'moneda': (
+                transaccion.servicio.tipo_cambio.nombre
+                if transaccion.servicio.tipo_cambio_id else 'MXN'
+            ),
             'estado': transaccion.estado,
         })
 

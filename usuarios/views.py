@@ -357,6 +357,7 @@ class PerfilProveedorView(APIView):
             'id_usuario': str(proveedor.id_usuario),
             'nombre': f'{proveedor.nombre} {proveedor.apellido_pa}',
             'url_foto_perfil': proveedor.url_foto_perfil,
+            'descripcion_perfil': proveedor.descripcion_perfil,
             'fecha_registro': proveedor.fecha_registro,
             'rating': stats.promedio_calificacion if stats else None,
             'num_reviews': stats.num_reviews if stats else 0,

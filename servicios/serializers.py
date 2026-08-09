@@ -154,10 +154,19 @@ class UpdateServicioSerializer(serializers.ModelSerializer):
 class InfoAplicanteSerializer(serializers.ModelSerializer):
     ultima_oferta = serializers.SerializerMethodField()
     penultima_oferta_monto = serializers.SerializerMethodField()
+    moneda = serializers.SerializerMethodField()
 
     class Meta:
         model = VistaInfoAplicantes
         fields = '__all__'
+
+    def get_moneda(self, obj):
+        servicio = (
+            Servicio.objects.select_related('tipo_cambio')
+            .filter(pk=obj.servicio_id)
+            .first()
+        )
+        return servicio.tipo_cambio.nombre if servicio and servicio.tipo_cambio_id else 'MXN'
 
     def _ultimas_ofertas(self, obj):
         cache = getattr(obj, '_ultimas_ofertas_cache', None)
@@ -193,10 +202,19 @@ class PostDetailsSerializer(serializers.ModelSerializer):
     dueño del servicio."""
 
     proveedor_asignado = serializers.SerializerMethodField()
+    moneda = serializers.SerializerMethodField()
 
     class Meta:
         model = VistaPostDetails
         fields = '__all__'
+
+    def get_moneda(self, obj):
+        servicio = (
+            Servicio.objects.select_related('tipo_cambio')
+            .filter(pk=obj.id_servicio)
+            .first()
+        )
+        return servicio.tipo_cambio.nombre if servicio and servicio.tipo_cambio_id else 'MXN'
 
     def get_proveedor_asignado(self, obj):
         postulacion = (
@@ -225,13 +243,14 @@ class PostDetailsSerializer(serializers.ModelSerializer):
 class ServicioListSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     tipo_cambio_nombre = serializers.SerializerMethodField()
+    id_estado = serializers.IntegerField(source='estado_id')
     estado_descripcion = serializers.CharField(source='estado.descripcion', read_only=True)
 
     class Meta:
         model = Servicio
         fields = [
             'id_servicio', 'titulo', 'precio_inicial', 'latitud',
-            'longitud', 'fecha', 'estado_descripcion', 'imagenes',
+            'longitud', 'fecha', 'id_estado', 'estado_descripcion', 'imagenes',
             'categoria_nombre', 'tipo_cambio_nombre',
         ]
 
