@@ -3,7 +3,7 @@ from django.utils import timezone as dj_timezone
 from rest_framework import serializers
 
 from dashBoard.models.vista_trabajos_disponibles import VistaTrabajosDisponibles
-from servicios.models import Servicio
+from servicios.models import Servicio, Oferta
 from .models import (
     Categoria,
     Usuario,
@@ -136,6 +136,8 @@ class ResumenGananciasSerializer(serializers.ModelSerializer):
  
 class TrabajoAplicadoSerializer(serializers.ModelSerializer):
     moneda = serializers.SerializerMethodField()
+    ultima_oferta = serializers.SerializerMethodField()
+    penultima_oferta_monto = serializers.SerializerMethodField()
 
     class Meta:
         model = VistaTrabajosAplicados
@@ -148,6 +150,33 @@ class TrabajoAplicadoSerializer(serializers.ModelSerializer):
             .first()
         )
         return servicio.tipo_cambio.nombre if servicio and servicio.tipo_cambio_id else 'MXN'
+
+    def _ultimas_ofertas(self, obj):
+        cache = getattr(obj, '_ultimas_ofertas_cache', None)
+        if cache is None:
+            cache = list(
+                Oferta.objects.filter(postulacion_id=obj.id_postulacion)
+                .order_by('-fecha')[:2]
+            )
+            obj._ultimas_ofertas_cache = cache
+        return cache
+
+    def get_ultima_oferta(self, obj):
+        ofertas = self._ultimas_ofertas(obj)
+        if not ofertas:
+            return None
+        ultima = ofertas[0]
+        return {
+            'monto': ultima.monto,
+            'fecha': ultima.fecha,
+            'comentario': ultima.comentario,
+            'emisor': 'proveedor' if ultima.emisor_id == obj.proveedor_id else 'cliente',
+            'aceptacion': ultima.aceptacion,
+        }
+
+    def get_penultima_oferta_monto(self, obj):
+        ofertas = self._ultimas_ofertas(obj)
+        return ofertas[1].monto if len(ofertas) > 1 else None
 
 
 class TrabajoAplicadoCardSerializer(serializers.ModelSerializer):

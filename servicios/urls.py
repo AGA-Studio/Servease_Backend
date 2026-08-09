@@ -21,6 +21,7 @@ urlpatterns = [
     path('pago/<int:id_transaccion>/cancelar/', views.CancelarPagoView.as_view(), name='pago-cancelar'),
     path('pago/en-curso-proveedor/', views.PagoEnCursoProveedorView.as_view(), name='pago-en-curso-proveedor'),
     path('postulaciones/<int:id_postulacion>/aceptar/', views.AceptarPostulacionView.as_view(), name='postulacion-aceptar'),
+    path('postulaciones/<int:id_postulacion>/aceptar-oferta/', views.AceptarOfertaView.as_view(), name='postulacion-aceptar-oferta'),
     path('postulaciones/<int:id_postulacion>/rechazar/', views.RechazarPostulacionView.as_view(), name='postulacion-rechazar'),
     path('postulaciones/<int:id_postulacion>/deshacer-rechazo/', views.DeshacerRechazoPostulacionView.as_view(), name='postulacion-deshacer-rechazo'),
     path('postulaciones/<int:id_postulacion>/cancelar/', views.CancelarPostulacionView.as_view(), name='postulacion-cancelar'),

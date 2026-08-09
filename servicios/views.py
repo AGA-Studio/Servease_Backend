@@ -28,9 +28,10 @@ from .models import Servicio, VistaInfoAplicantes, VistaPostDetails,Postulacion,
 from calificaciones.models import Calificacion
 from mensajeria.models import Conversacion
 from transacciones.models import Transaccion
+from usuarios.models import Notificacion
 from usuarios.permissions import IsClientRole, IsProviderRole
 from .models import Oferta, Postulacion, Servicio, VistaInfoAplicantes, VistaPostDetails
-from .models.estado import ABIERTO, ACEPTADO, CANCELADO, COMPLETADO, PENDIENTE, PROGRESO, RECHAZADA
+from .models.estado import ABIERTO, ACEPTADO, ACTIVA, CANCELADO, COMPLETADO, PENDIENTE, PROGRESO, RECHAZADA
 
 from .serializers import (
     CalificarServicioSerializer,
@@ -207,7 +208,7 @@ class AceptarPostulacionView(APIView):
                 servicio_id=postulacion.servicio_id,
                 cliente_id=postulacion.servicio.cliente_id,
                 proveedor_id=postulacion.proveedor_id,
-                defaults={'estado_id': ABIERTO},
+                defaults={'estado_id': ACTIVA},
             )
 
         return Response(
@@ -878,6 +879,56 @@ class OfertaCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         oferta = serializer.save()
         return Response(OfertaSerializer(oferta).data, status=status.HTTP_201_CREATED)
+
+
+class AceptarOfertaView(APIView):
+    """Acepta el monto de la última oferta de una postulación, sin aceptar
+    la postulación en sí — solo la contraparte de quien mandó esa oferta
+    puede aceptarla (si la mandó el cliente, solo el proveedor; y viceversa).
+    Deja la postulación pendiente: es el cliente quien, con la oferta ya
+    aceptada, confirma para asignar el trabajo vía AceptarPostulacionView."""
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, id_postulacion):
+        postulacion = get_object_or_404(Postulacion, pk=id_postulacion)
+        cliente_id = postulacion.servicio.cliente_id
+        proveedor_id = postulacion.proveedor_id
+        usuario = request.user
+
+        if usuario.id_usuario not in (cliente_id, proveedor_id):
+            raise PermissionDenied('No puedes aceptar una oferta de una postulación que no te pertenece.')
+        if postulacion.estado_id != PENDIENTE:
+            raise PermissionDenied('Solo puedes aceptar ofertas de postulaciones que sigan pendientes.')
+
+        ultima_oferta = postulacion.ofertas.order_by('-fecha').first()
+        if not ultima_oferta:
+            raise ValidationError('No hay ninguna oferta que aceptar.')
+        if ultima_oferta.emisor_id == usuario.id_usuario:
+            raise PermissionDenied('No puedes aceptar tu propia oferta.')
+        if ultima_oferta.aceptacion:
+            raise ValidationError('Esta oferta ya fue aceptada.')
+
+        ultima_oferta.aceptacion = True
+        ultima_oferta.save(update_fields=['aceptacion'])
+
+        contexto_rol = 'client' if ultima_oferta.emisor_id == cliente_id else 'provider'
+        Notificacion.objects.create(
+            usuario_id=ultima_oferta.emisor_id,
+            tipo='oferta_aceptada',
+            titulo='Tu oferta fue aceptada',
+            contenido=(
+                f'Tu propuesta de ${ultima_oferta.monto} para "{postulacion.servicio.titulo}" '
+                'fue aceptada. Ya se puede confirmar para asignar el trabajo.'
+            ),
+            leido=False,
+            fecha=timezone.now(),
+            referencia_tabla='postulacion',
+            referencia_id=postulacion.id_postulacion,
+            contexto_rol=contexto_rol,
+        )
+
+        return Response(OfertaSerializer(ultima_oferta).data, status=status.HTTP_200_OK)
+
 
 class PostularServicioView(APIView):
     """Un proveedor se postula a un servicio abierto."""

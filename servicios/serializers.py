@@ -188,6 +188,7 @@ class InfoAplicanteSerializer(serializers.ModelSerializer):
             'fecha': ultima.fecha,
             'comentario': ultima.comentario,
             'emisor': 'proveedor' if ultima.emisor_id == obj.proveedor_id else 'cliente',
+            'aceptacion': ultima.aceptacion,
         }
 
     def get_penultima_oferta_monto(self, obj):
@@ -202,6 +203,7 @@ class PostDetailsSerializer(serializers.ModelSerializer):
     dueño del servicio."""
 
     proveedor_asignado = serializers.SerializerMethodField()
+    precio_acordado = serializers.SerializerMethodField()
     moneda = serializers.SerializerMethodField()
 
     class Meta:
@@ -216,13 +218,30 @@ class PostDetailsSerializer(serializers.ModelSerializer):
         )
         return servicio.tipo_cambio.nombre if servicio and servicio.tipo_cambio_id else 'MXN'
 
+    def _postulacion_aceptada(self, obj):
+        cache = getattr(obj, '_postulacion_aceptada_cache', None)
+        if cache is None:
+            cache = (
+                Postulacion.objects
+                .filter(servicio_id=obj.id_servicio, estado_id=ACEPTADO)
+                .select_related('proveedor')
+                .first()
+            )
+            obj._postulacion_aceptada_cache = cache
+        return cache
+
+    def get_precio_acordado(self, obj):
+        """Precio pactado con el proveedor aceptado (última oferta si hubo
+        negociación, si no el precio propuesto). None si aún no hay
+        proveedor aceptado — en ese caso se usa precio_inicial."""
+        postulacion = self._postulacion_aceptada(obj)
+        if not postulacion:
+            return None
+        ultima_oferta = postulacion.ofertas.order_by('-fecha').first()
+        return ultima_oferta.monto if ultima_oferta else postulacion.precio_propuesto
+
     def get_proveedor_asignado(self, obj):
-        postulacion = (
-            Postulacion.objects
-            .filter(servicio_id=obj.id_servicio, estado_id=ACEPTADO)
-            .select_related('proveedor')
-            .first()
-        )
+        postulacion = self._postulacion_aceptada(obj)
         if not postulacion:
             return None
         proveedor = postulacion.proveedor

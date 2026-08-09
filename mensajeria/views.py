@@ -1,5 +1,5 @@
 from django.core.files.storage import default_storage
-from django.db.models import Q
+from django.db.models import F, Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -49,7 +49,7 @@ class ConversacionListCreateView(APIView):
             "proveedor__rol",
             "cliente__categoria",
             "proveedor__categoria",
-        ).order_by("-ultimo_mensaje_fecha", "-fecha_inicio")
+        ).order_by(F("ultimo_mensaje_fecha").desc(nulls_last=True), "-fecha_inicio")
 
         paginator = PageNumberPagination()
         paginator.page_size = 20
