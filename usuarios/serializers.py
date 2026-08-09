@@ -1,7 +1,9 @@
 from django.conf import settings
+from django.utils import timezone as dj_timezone
 from rest_framework import serializers
 
 from dashBoard.models.vista_trabajos_disponibles import VistaTrabajosDisponibles
+from servicios.models import Servicio, Oferta
 from .models import (
     Categoria,
     Usuario,
@@ -133,9 +135,48 @@ class ResumenGananciasSerializer(serializers.ModelSerializer):
  
  
 class TrabajoAplicadoSerializer(serializers.ModelSerializer):
+    moneda = serializers.SerializerMethodField()
+    ultima_oferta = serializers.SerializerMethodField()
+    penultima_oferta_monto = serializers.SerializerMethodField()
+
     class Meta:
         model = VistaTrabajosAplicados
         fields = '__all__'
+
+    def get_moneda(self, obj):
+        servicio = (
+            Servicio.objects.select_related('tipo_cambio')
+            .filter(pk=obj.id_servicio)
+            .first()
+        )
+        return servicio.tipo_cambio.nombre if servicio and servicio.tipo_cambio_id else 'MXN'
+
+    def _ultimas_ofertas(self, obj):
+        cache = getattr(obj, '_ultimas_ofertas_cache', None)
+        if cache is None:
+            cache = list(
+                Oferta.objects.filter(postulacion_id=obj.id_postulacion)
+                .order_by('-fecha')[:2]
+            )
+            obj._ultimas_ofertas_cache = cache
+        return cache
+
+    def get_ultima_oferta(self, obj):
+        ofertas = self._ultimas_ofertas(obj)
+        if not ofertas:
+            return None
+        ultima = ofertas[0]
+        return {
+            'monto': ultima.monto,
+            'fecha': ultima.fecha,
+            'comentario': ultima.comentario,
+            'emisor': 'proveedor' if ultima.emisor_id == obj.proveedor_id else 'cliente',
+            'aceptacion': ultima.aceptacion,
+        }
+
+    def get_penultima_oferta_monto(self, obj):
+        ofertas = self._ultimas_ofertas(obj)
+        return ofertas[1].monto if len(ofertas) > 1 else None
 
 
 class TrabajoAplicadoCardSerializer(serializers.ModelSerializer):
@@ -164,13 +205,26 @@ class UltimaResenaSerializer(serializers.ModelSerializer):
 
 class NotificacionSerializer(serializers.ModelSerializer):
     id_usuario = serializers.UUIDField(source='usuario_id', read_only=True)
- 
+    fecha = serializers.SerializerMethodField()
+
     class Meta:
         model = Notificacion
         fields = [
             'id_notificacion', 'id_usuario', 'tipo', 'titulo', 'contenido',
-            'leido', 'fecha', 'referencia_tabla', 'referencia_id',
+            'leido', 'fecha', 'referencia_tabla', 'referencia_id', 'contexto_rol',
         ]
+
+    def get_fecha(self, obj):
+        # La tabla `notificacion` la llena un trigger fuera de Django (no hay
+        # auto_now_add ni .create() en este repo). Si la columna resultó
+        # `timestamp` sin zona horaria, psycopg2 la entrega naive y Django
+        # (con USE_TZ=True) la trataría como UTC por default, aunque el
+        # trigger la haya escrito en hora local — esto la interpreta como
+        # hora local real antes de convertirla, evitando el desfase.
+        fecha = obj.fecha
+        if fecha and dj_timezone.is_naive(fecha):
+            fecha = dj_timezone.make_aware(fecha, dj_timezone.get_default_timezone())
+        return fecha
 
 #Portafolio Proveedor Serializer
 class PortafolioSerializer(serializers.ModelSerializer):

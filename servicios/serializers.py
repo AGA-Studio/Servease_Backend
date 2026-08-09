@@ -1,11 +1,13 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.db.models import Avg
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
+from calificaciones.models import Calificacion
 from usuarios.models import Categoria
-from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado,VistaConversaciones  
-from .models.estado import ABIERTO, CANCELADO, PENDIENTE
+from .models import Servicio, TipoCambio, VistaInfoAplicantes, VistaPostDetails, Postulacion, Oferta, Estado,VistaConversaciones
+from .models.estado import ABIERTO, CANCELADO, PENDIENTE, ACEPTADO
 
 # Bounding box del área urbana de Tijuana (excluye Tecate, Rosarito, Ensenada).
 # Es un rectángulo aproximado, no el polígono real del municipio.
@@ -152,10 +154,19 @@ class UpdateServicioSerializer(serializers.ModelSerializer):
 class InfoAplicanteSerializer(serializers.ModelSerializer):
     ultima_oferta = serializers.SerializerMethodField()
     penultima_oferta_monto = serializers.SerializerMethodField()
+    moneda = serializers.SerializerMethodField()
 
     class Meta:
         model = VistaInfoAplicantes
         fields = '__all__'
+
+    def get_moneda(self, obj):
+        servicio = (
+            Servicio.objects.select_related('tipo_cambio')
+            .filter(pk=obj.servicio_id)
+            .first()
+        )
+        return servicio.tipo_cambio.nombre if servicio and servicio.tipo_cambio_id else 'MXN'
 
     def _ultimas_ofertas(self, obj):
         cache = getattr(obj, '_ultimas_ofertas_cache', None)
@@ -177,6 +188,7 @@ class InfoAplicanteSerializer(serializers.ModelSerializer):
             'fecha': ultima.fecha,
             'comentario': ultima.comentario,
             'emisor': 'proveedor' if ultima.emisor_id == obj.proveedor_id else 'cliente',
+            'aceptacion': ultima.aceptacion,
         }
 
     def get_penultima_oferta_monto(self, obj):
@@ -185,21 +197,79 @@ class InfoAplicanteSerializer(serializers.ModelSerializer):
 
 
 class PostDetailsSerializer(serializers.ModelSerializer):
+    """Detalle de un servicio. `proveedor_asignado` es el proveedor con
+    postulación aceptada (si ya hay uno) — usado por el cliente para ver el
+    perfil del proveedor asignado, análogo a como el proveedor ve al cliente
+    dueño del servicio."""
+
+    proveedor_asignado = serializers.SerializerMethodField()
+    precio_acordado = serializers.SerializerMethodField()
+    moneda = serializers.SerializerMethodField()
+
     class Meta:
         model = VistaPostDetails
         fields = '__all__'
+
+    def get_moneda(self, obj):
+        servicio = (
+            Servicio.objects.select_related('tipo_cambio')
+            .filter(pk=obj.id_servicio)
+            .first()
+        )
+        return servicio.tipo_cambio.nombre if servicio and servicio.tipo_cambio_id else 'MXN'
+
+    def _postulacion_aceptada(self, obj):
+        cache = getattr(obj, '_postulacion_aceptada_cache', None)
+        if cache is None:
+            cache = (
+                Postulacion.objects
+                .filter(servicio_id=obj.id_servicio, estado_id=ACEPTADO)
+                .select_related('proveedor')
+                .first()
+            )
+            obj._postulacion_aceptada_cache = cache
+        return cache
+
+    def get_precio_acordado(self, obj):
+        """Precio pactado con el proveedor aceptado (última oferta si hubo
+        negociación, si no el precio propuesto). None si aún no hay
+        proveedor aceptado — en ese caso se usa precio_inicial."""
+        postulacion = self._postulacion_aceptada(obj)
+        if not postulacion:
+            return None
+        ultima_oferta = postulacion.ofertas.order_by('-fecha').first()
+        return ultima_oferta.monto if ultima_oferta else postulacion.precio_propuesto
+
+    def get_proveedor_asignado(self, obj):
+        postulacion = self._postulacion_aceptada(obj)
+        if not postulacion:
+            return None
+        proveedor = postulacion.proveedor
+        avg = Calificacion.objects.filter(
+            evaluado_id=proveedor.id_usuario
+        ).aggregate(avg=Avg('puntuacion'))['avg']
+        return {
+            'id_usuario': str(proveedor.id_usuario),
+            'nombre': f'{proveedor.nombre} {proveedor.apellido_pa}',
+            'url_foto_perfil': proveedor.url_foto_perfil,
+            'rating': round(avg, 1) if avg is not None else None,
+            'num_reviews': Calificacion.objects.filter(
+                evaluado_id=proveedor.id_usuario
+            ).count(),
+        }
 
 # Falto el serializer para la lista de servicios, que incluye el nombre de la categoría asociada a cada servicio.
 class ServicioListSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     tipo_cambio_nombre = serializers.SerializerMethodField()
+    id_estado = serializers.IntegerField(source='estado_id')
     estado_descripcion = serializers.CharField(source='estado.descripcion', read_only=True)
 
     class Meta:
         model = Servicio
         fields = [
             'id_servicio', 'titulo', 'precio_inicial', 'latitud',
-            'longitud', 'fecha', 'estado_descripcion', 'imagenes',
+            'longitud', 'fecha', 'id_estado', 'estado_descripcion', 'imagenes',
             'categoria_nombre', 'tipo_cambio_nombre',
         ]
 

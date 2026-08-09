@@ -38,8 +38,9 @@ from .models import (
     VistaUltimaResena,
     Notificacion,
     MfaBackupCode,
-    PortafolioProveedor,  
+    PortafolioProveedor,
 )
+from dashBoard.models import VistaDashboardProveedor
 from .permissions import IsAdminRole, IsClientRole
 from .serializers import (
     CategoriaSerializer,
@@ -342,6 +343,28 @@ class PerfilClienteView(RetrieveAPIView):
     lookup_url_kwarg = 'id_usuario'
 
 
+class PerfilProveedorView(APIView):
+    """Perfil público de un proveedor (datos generales + rating). No existe
+    una vista de BD equivalente a vista_perfil_cliente para proveedores, así
+    que se compone aquí a partir de Usuario + vista_dashboard_proveedor,
+    excluyendo los campos privados de esa vista (ganancias)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id_usuario):
+        proveedor = get_object_or_404(Usuario, pk=id_usuario)
+        stats = VistaDashboardProveedor.objects.filter(pk=id_usuario).first()
+        return Response({
+            'id_usuario': str(proveedor.id_usuario),
+            'nombre': f'{proveedor.nombre} {proveedor.apellido_pa}',
+            'url_foto_perfil': proveedor.url_foto_perfil,
+            'descripcion_perfil': proveedor.descripcion_perfil,
+            'fecha_registro': proveedor.fecha_registro,
+            'rating': stats.promedio_calificacion if stats else None,
+            'num_reviews': stats.num_reviews if stats else 0,
+            'trabajos_completados': stats.trabajos_completados if stats else 0,
+        })
+
+
 class HomeClienteView(ListAPIView):
     """Servicios recomendados para la pantalla de inicio del cliente."""
     permission_classes = [IsAuthenticated]
@@ -365,16 +388,13 @@ class ReviewsClienteView(ListAPIView):
 
 
 class UltimasPublicacionesClienteView(ListAPIView):
-    """Últimas 5 publicaciones (servicios) de un cliente."""
+    """Últimas 5 publicaciones (servicios) de un cliente. Público entre
+    usuarios autenticados, igual que perfil-cliente/reviews (perfil público)."""
     permission_classes = [IsAuthenticated]
     serializer_class = ServicioSerializer
 
     def get_queryset(self):
         id_usuario = self.kwargs['id_usuario']
-        if str(self.request.user.id_usuario) != str(id_usuario):
-            raise PermissionDenied(
-                'No puedes ver las publicaciones de otro usuario.'
-            )
         return Servicio.objects.raw(
             'SELECT * FROM ultimas_publicaciones_cliente(%s)',
             [str(id_usuario)],
