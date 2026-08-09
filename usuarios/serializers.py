@@ -216,14 +216,17 @@ class NotificacionSerializer(serializers.ModelSerializer):
 
     def get_fecha(self, obj):
         # La tabla `notificacion` la llena un trigger fuera de Django (no hay
-        # auto_now_add ni .create() en este repo). Si la columna resultó
-        # `timestamp` sin zona horaria, psycopg2 la entrega naive y Django
-        # (con USE_TZ=True) la trataría como UTC por default, aunque el
-        # trigger la haya escrito en hora local — esto la interpreta como
-        # hora local real antes de convertirla, evitando el desfase.
+        # auto_now_add ni .create() en este repo), y la columna resultó
+        # `timestamp` sin zona horaria, así que psycopg2 la entrega naive.
+        # Verificado en vivo (2026-08-09): el trigger escribe la hora en UTC
+        # (NOW() de Postgres), NO en hora local de TIME_ZONE (America/Tijuana)
+        # — localizar como Tijuana desplazaba la fecha ~7h hacia el futuro,
+        # causando diffs negativos en el frontend (relojes "0m" pegados y
+        # nunca avanzando). Se localiza como UTC, que es lo que el trigger
+        # realmente escribe.
         fecha = obj.fecha
         if fecha and dj_timezone.is_naive(fecha):
-            fecha = dj_timezone.make_aware(fecha, dj_timezone.get_default_timezone())
+            fecha = dj_timezone.make_aware(fecha, dj_timezone.UTC)
         return fecha
 
 #Portafolio Proveedor Serializer
