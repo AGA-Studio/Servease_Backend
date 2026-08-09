@@ -55,7 +55,7 @@ class ConversacionListSerializer(serializers.ModelSerializer):
     professionKey = serializers.SerializerMethodField()
     lastMessagePreview = serializers.CharField(source="ultimo_mensaje_preview")
     timeAgoKey = serializers.SerializerMethodField()
-    unreadCount = serializers.IntegerField(source="unread_count", read_only=True)
+    unreadCount = serializers.SerializerMethodField()
     servicio_titulo = serializers.CharField(source="servicio.titulo", default=None, read_only=True)
     cliente_id = serializers.UUIDField(read_only=True)
     proveedor_id = serializers.UUIDField(read_only=True)
@@ -95,6 +95,15 @@ class ConversacionListSerializer(serializers.ModelSerializer):
         if other.categoria:
             return other.categoria.nombre
         return ""
+
+    def get_unreadCount(self, obj):
+        # unread_count_* es por destinatario: cada lado de la conversación
+        # solo debe ver los mensajes que a ÉL le faltan por leer, no los que
+        # el otro participante aún no ha leído de los suyos.
+        user = self.context["request"].user
+        if str(obj.cliente_id) == str(user.id_usuario):
+            return obj.unread_count_cliente
+        return obj.unread_count_proveedor
 
     def get_timeAgoKey(self, obj):
         if not obj.ultimo_mensaje_fecha:

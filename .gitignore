@@ -36,3 +36,4 @@ api.md
 .dockerignore
 supabase/
 docs/
+.vscode/*

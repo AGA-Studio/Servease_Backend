@@ -35,8 +35,12 @@ class Conversacion(models.Model):
     # Denormalized for fast list queries
     ultimo_mensaje_preview = models.CharField(max_length=200, blank=True, default="")
     ultimo_mensaje_fecha = models.DateTimeField(null=True, blank=True)
-    # Denormalized unread count for performance
-    unread_count = models.PositiveIntegerField(default=0)
+    # Denormalized unread counts for performance. Un solo contador compartido
+    # mostraba al remitente el mismo número que al destinatario (ver bug: el
+    # proveedor veía "2 no leídos" por mensajes que él mismo había enviado),
+    # así que cada lado del chat lleva su propio contador.
+    unread_count_cliente = models.PositiveIntegerField(default=0)
+    unread_count_proveedor = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = "conversacion"
