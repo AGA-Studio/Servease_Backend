@@ -16,6 +16,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
+import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q  
 from rest_framework.throttling import ScopedRateThrottle
@@ -29,7 +30,7 @@ from mensajeria.models import Conversacion
 from transacciones.models import Transaccion
 from usuarios.permissions import IsClientRole, IsProviderRole
 from .models import Oferta, Postulacion, Servicio, VistaInfoAplicantes, VistaPostDetails
-from .models.estado import ABIERTO, CANCELADO, PENDIENTE
+from .models.estado import ABIERTO, ACEPTADO, CANCELADO, COMPLETADO, PENDIENTE, PROGRESO, RECHAZADA
 
 from .serializers import (
     CalificarServicioSerializer,
@@ -129,7 +130,7 @@ class MisTrabajosView(ListAPIView):
             Postulacion.objects
             .filter(
                 proveedor_id=self.request.user.id_usuario,
-                estado__in=['pendiente', 'aceptada'],
+                estado_id__in=[PENDIENTE, ACEPTADO],
             )
             .select_related('servicio', 'servicio__categoria', 'servicio__tipo_cambio')
             .order_by('-fecha')
@@ -151,13 +152,24 @@ class InfoAplicantesView(ListAPIView):
         return VistaInfoAplicantes.objects.filter(servicio_id=servicio_id)
 
 
+class ServicioFilter(django_filters.FilterSet):
+    # 'estado' es FK a Estado; el filtro por texto sigue aceptando el mismo
+    # query param que ya usa el frontend (?estado=abierto) mapeado a la
+    # descripcion de la FK en vez de comparar el id directamente.
+    estado = django_filters.CharFilter(field_name='estado__descripcion')
+
+    class Meta:
+        model = Servicio
+        fields = ['categoria_id', 'estado']
+
+
 class ServicioListView(ListAPIView):
     """Catalogo publico de servicios, filtrable por categoria y estado."""
     permission_classes = [AllowAny]
     serializer_class = ServicioListSerializer
     queryset = Servicio.objects.exclude(estado_id=CANCELADO).order_by('-fecha')
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['categoria_id', 'estado']
+    filterset_class = ServicioFilter
 
 
 class AceptarPostulacionView(APIView):
@@ -171,25 +183,25 @@ class AceptarPostulacionView(APIView):
             raise PermissionDenied(
                 'No puedes aceptar una postulación de un servicio que no es tuyo.'
             )
-        if postulacion.estado != 'pendiente':
+        if postulacion.estado_id != PENDIENTE:
             raise PermissionDenied(
                 'Solo puedes aceptar postulaciones que sigan pendientes.'
             )
-        if postulacion.servicio.estado != 'abierto':
+        if postulacion.servicio.estado_id != ABIERTO:
             raise PermissionDenied(
                 'Solo puedes aceptar postulaciones de un servicio abierto.'
             )
 
         with transaction.atomic():
-            postulacion.estado = 'aceptada'
-            postulacion.save(update_fields=['estado'])
+            postulacion.estado_id = ACEPTADO
+            postulacion.save(update_fields=['estado_id'])
 
-            postulacion.servicio.estado = 'progreso'
-            postulacion.servicio.save(update_fields=['estado'])
+            postulacion.servicio.estado_id = PROGRESO
+            postulacion.servicio.save(update_fields=['estado_id'])
 
             Postulacion.objects.filter(
-                servicio_id=postulacion.servicio_id, estado='pendiente'
-            ).exclude(pk=postulacion.pk).update(estado='rechazada')
+                servicio_id=postulacion.servicio_id, estado_id=PENDIENTE
+            ).exclude(pk=postulacion.pk).update(estado_id=RECHAZADA)
 
             Conversacion.objects.get_or_create(
                 servicio_id=postulacion.servicio_id,
@@ -215,13 +227,13 @@ class RechazarPostulacionView(APIView):
             raise PermissionDenied(
                 'No puedes rechazar una postulación de un servicio que no es tuyo.'
             )
-        if postulacion.estado != 'pendiente':
+        if postulacion.estado_id != PENDIENTE:
             raise PermissionDenied(
                 'Solo puedes rechazar postulaciones que sigan pendientes.'
             )
 
-        postulacion.estado = 'rechazada'
-        postulacion.save(update_fields=['estado'])
+        postulacion.estado_id = RECHAZADA
+        postulacion.save(update_fields=['estado_id'])
         return Response(
             {'detail': 'La postulación se rechazó correctamente.'},
             status=status.HTTP_200_OK,
@@ -239,17 +251,17 @@ class DeshacerRechazoPostulacionView(APIView):
             raise PermissionDenied(
                 'No puedes deshacer el rechazo de una postulación de un servicio que no es tuyo.'
             )
-        if postulacion.estado != 'rechazada':
+        if postulacion.estado_id != RECHAZADA:
             raise PermissionDenied(
                 'Solo puedes deshacer el rechazo de postulaciones que estén rechazadas.'
             )
-        if postulacion.servicio.estado != 'abierto':
+        if postulacion.servicio.estado_id != ABIERTO:
             raise PermissionDenied(
                 'Solo puedes deshacer el rechazo de postulaciones de un servicio abierto.'
             )
 
-        postulacion.estado = 'pendiente'
-        postulacion.save(update_fields=['estado'])
+        postulacion.estado_id = PENDIENTE
+        postulacion.save(update_fields=['estado_id'])
         return Response(
             {'detail': 'El rechazo de la postulación se deshizo correctamente.'},
             status=status.HTTP_200_OK,
@@ -267,13 +279,13 @@ class CancelarPostulacionView(APIView):
             raise PermissionDenied(
                 'No puedes cancelar una postulación que no es tuya.'
             )
-        if postulacion.estado != 'pendiente':
+        if postulacion.estado_id != PENDIENTE:
             raise PermissionDenied(
                 'Solo puedes cancelar postulaciones que sigan pendientes.'
             )
 
-        postulacion.estado = 'cancelada'
-        postulacion.save(update_fields=['estado'])
+        postulacion.estado_id = CANCELADO
+        postulacion.save(update_fields=['estado_id'])
         return Response(
             {'detail': 'La postulación se canceló correctamente.'},
             status=status.HTTP_200_OK,
@@ -348,13 +360,13 @@ class CompletarServicioView(APIView):
             postulacion = Postulacion.objects.filter(
                 servicio_id=id_servicio,
                 proveedor_id=request.user.id_usuario,
-                estado='aceptada',
+                estado_id=ACEPTADO,
             ).first()
             if postulacion is None:
                 raise PermissionDenied(
                     'No eres el proveedor asignado a este servicio.'
                 )
-            if servicio.estado != 'progreso':
+            if servicio.estado_id != PROGRESO:
                 raise PermissionDenied(
                     'Solo puedes completar un servicio que esté en progreso.'
                 )
@@ -406,8 +418,8 @@ class CompletarServicioView(APIView):
                 comentario=comentario,
             )
 
-            servicio.estado = 'completado'
-            servicio.save(update_fields=['estado'])
+            servicio.estado_id = COMPLETADO
+            servicio.save(update_fields=['estado_id'])
 
         return Response(
             {'detail': 'El servicio se completó correctamente.'},
@@ -436,13 +448,13 @@ class CalificarServicioView(APIView):
                 raise PermissionDenied(
                     'No puedes calificar un servicio que no es tuyo.'
                 )
-            if servicio.estado != 'completado':
+            if servicio.estado_id != COMPLETADO:
                 raise PermissionDenied(
                     'Solo puedes calificar un servicio que ya esté completado.'
                 )
 
             postulacion = Postulacion.objects.filter(
-                servicio_id=id_servicio, estado='aceptada'
+                servicio_id=id_servicio, estado_id=ACEPTADO
             ).first()
             if postulacion is None:
                 raise PermissionDenied(
@@ -484,7 +496,7 @@ class PendienteCalificarView(APIView):
 
         servicio = (
             Servicio.objects
-            .filter(cliente_id=request.user.id_usuario, estado='completado')
+            .filter(cliente_id=request.user.id_usuario, estado_id=COMPLETADO)
             .exclude(id_servicio__in=calificados_ids)
             .order_by('-fecha')
             .first()
@@ -494,7 +506,7 @@ class PendienteCalificarView(APIView):
 
         postulacion = (
             Postulacion.objects
-            .filter(servicio_id=servicio.id_servicio, estado='aceptada')
+            .filter(servicio_id=servicio.id_servicio, estado_id=ACEPTADO)
             .select_related('proveedor')
             .first()
         )
@@ -527,13 +539,13 @@ class IniciarPagoView(APIView):
             postulacion = Postulacion.objects.filter(
                 servicio_id=id_servicio,
                 proveedor_id=request.user.id_usuario,
-                estado='aceptada',
+                estado_id=ACEPTADO,
             ).first()
             if postulacion is None:
                 raise PermissionDenied(
                     'No eres el proveedor asignado a este servicio.'
                 )
-            if servicio.estado != 'progreso':
+            if servicio.estado_id != PROGRESO:
                 raise PermissionDenied(
                     'Solo puedes iniciar un cobro para un servicio en progreso.'
                 )
@@ -588,6 +600,7 @@ class IniciarPagoView(APIView):
             {
                 'id_transaccion': transaccion.id_transaccion,
                 'monto': transaccion.monto,
+                'moneda': moneda.upper(),
                 'estado': transaccion.estado,
                 'client_secret': intent.client_secret,
             },
@@ -611,9 +624,12 @@ class PagoPendienteView(APIView):
                 'No puedes ver el pago de un servicio que no es tuyo.'
             )
 
-        transaccion = Transaccion.objects.filter(
+        transaccion = Transaccion.objects.select_related(
+            'servicio__tipo_cambio'
+        ).filter(
             servicio_id=id_servicio, cliente_id=request.user.id_usuario,
             metodo_pago='tarjeta', estado='pendiente',
+            stripe_payment_intent_id__isnull=False,
         ).order_by('-fecha').first()
         if transaccion is None:
             raise Http404(
@@ -634,6 +650,10 @@ class PagoPendienteView(APIView):
         return Response({
             'id_transaccion': transaccion.id_transaccion,
             'monto': transaccion.monto,
+            'moneda': (
+                transaccion.servicio.tipo_cambio.nombre
+                if transaccion.servicio.tipo_cambio_id else 'MXN'
+            ),
             'client_secret': intent.client_secret,
         })
 
@@ -656,8 +676,9 @@ class PagoPendienteClienteView(APIView):
             .filter(
                 cliente_id=request.user.id_usuario,
                 metodo_pago='tarjeta', estado__in=['pendiente', 'rechazada'],
+                stripe_payment_intent_id__isnull=False,
             )
-            .select_related('servicio')
+            .select_related('servicio__tipo_cambio')
             .order_by('-fecha')
             .first()
         )
@@ -680,6 +701,10 @@ class PagoPendienteClienteView(APIView):
             'titulo': transaccion.servicio.titulo,
             'id_transaccion': transaccion.id_transaccion,
             'monto': transaccion.monto,
+            'moneda': (
+                transaccion.servicio.tipo_cambio.nombre
+                if transaccion.servicio.tipo_cambio_id else 'MXN'
+            ),
             'client_secret': intent.client_secret,
         })
 
@@ -735,7 +760,7 @@ class PagoEstadoView(APIView):
         postulacion = Postulacion.objects.filter(
             servicio_id=id_servicio,
             proveedor_id=request.user.id_usuario,
-            estado='aceptada',
+            estado_id=ACEPTADO,
         ).first()
         if postulacion is None:
             raise PermissionDenied(
@@ -744,6 +769,7 @@ class PagoEstadoView(APIView):
 
         transaccion = (
             Transaccion.objects
+            .select_related('servicio__tipo_cambio')
             .filter(servicio_id=id_servicio, metodo_pago='tarjeta')
             .order_by('-fecha')
             .first()
@@ -753,6 +779,11 @@ class PagoEstadoView(APIView):
 
         return Response({
             'id_transaccion': transaccion.id_transaccion,
+            'monto': transaccion.monto,
+            'moneda': (
+                transaccion.servicio.tipo_cambio.nombre
+                if transaccion.servicio.tipo_cambio_id else 'MXN'
+            ),
             'estado': transaccion.estado,
         })
 
@@ -771,8 +802,8 @@ class PagoEnCursoProveedorView(APIView):
         transaccion = (
             Transaccion.objects
             .filter(proveedor_id=request.user.id_usuario, metodo_pago='tarjeta')
-            .exclude(servicio__estado='completado')
-            .select_related('servicio')
+            .exclude(servicio__estado_id=COMPLETADO)
+            .select_related('servicio__tipo_cambio')
             .order_by('-fecha')
             .first()
         )
@@ -782,6 +813,11 @@ class PagoEnCursoProveedorView(APIView):
         return Response({
             'id_servicio': transaccion.servicio_id,
             'id_transaccion': transaccion.id_transaccion,
+            'monto': transaccion.monto,
+            'moneda': (
+                transaccion.servicio.tipo_cambio.nombre
+                if transaccion.servicio.tipo_cambio_id else 'MXN'
+            ),
             'estado': transaccion.estado,
         })
 
