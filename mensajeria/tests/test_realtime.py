@@ -23,7 +23,7 @@ class FakeChannel:
     async def subscribe(self):
         self.subscribed = True
 
-    def send_broadcast(self, event, data):
+    async def send_broadcast(self, event, data):
         self.sent = (event, data)
 
 
