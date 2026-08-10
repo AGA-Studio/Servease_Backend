@@ -277,14 +277,6 @@ class ServicioListSerializer(serializers.ModelSerializer):
         return obj.tipo_cambio.nombre if obj.tipo_cambio_id else None
 
 
-class CompletarServicioSerializer(serializers.Serializer):
-    metodo_pago = serializers.ChoiceField(choices=['efectivo', 'tarjeta'])
-    puntuacion = serializers.IntegerField(min_value=1, max_value=5)
-    comentario = serializers.CharField(
-        required=False, allow_blank=True, max_length=1000, default=''
-    )
-
-
 class CalificarServicioSerializer(serializers.Serializer):
     puntuacion = serializers.IntegerField(min_value=1, max_value=5)
     comentario = serializers.CharField(

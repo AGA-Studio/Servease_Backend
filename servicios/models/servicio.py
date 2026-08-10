@@ -19,6 +19,10 @@ class Servicio(models.Model):
         )
     cliente = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='servicios_solicitados')
     categoria = models.ForeignKey('usuarios.Categoria', on_delete=models.PROTECT, related_name='servicios')
+    # El proveedor marca aqui que el trabajo ya esta fisicamente terminado —
+    # solo entonces el cliente puede elegir metodo de pago. No cambia
+    # `estado`, que se queda en PROGRESO hasta que el pago se resuelve.
+    trabajo_terminado = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'servicio'

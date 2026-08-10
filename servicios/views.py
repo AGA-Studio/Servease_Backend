@@ -35,7 +35,6 @@ from .models.estado import ABIERTO, ACEPTADO, ACTIVA, CANCELADO, COMPLETADO, PEN
 
 from .serializers import (
     CalificarServicioSerializer,
-    CompletarServicioSerializer,
     CreateServicioSerializer,
     InfoAplicanteSerializer,
     MisTrabajosSerializer,
@@ -330,34 +329,21 @@ def calcular_comision(monto):
     return (monto * COMISION_RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
-class CompletarServicioView(APIView):
+class MarcarTrabajoTerminadoView(APIView):
     """
-    Marca un servicio como completado y crea el rating del proveedor hacia el
-    cliente. Solo el proveedor asignado (postulación aceptada), y solo si el
-    servicio sigue en progreso.
-
-    Efectivo: crea la transacción aquí mismo (monto calculado en el servidor,
-    nunca confiado del cliente).
-    Tarjeta: exige que ya exista una transacción de tarjeta 'completada' para
-    este servicio (creada por el flujo de pago), es decir que el pago ya se
-    haya resuelto como aprobado antes de poder completar.
+    El proveedor marca el trabajo como físicamente terminado. No completa el
+    servicio ni crea ningún pago o rating todavía — solo desbloquea, del
+    lado del cliente, la elección de método de pago (efectivo o tarjeta).
     """
     permission_classes = [IsAuthenticated, IsProviderRole]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'servicio-completar'
 
     def post(self, request, id_servicio):
-        serializer = CompletarServicioSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        metodo_pago = serializer.validated_data['metodo_pago']
-        puntuacion = serializer.validated_data['puntuacion']
-        comentario = serializer.validated_data['comentario']
-
         with transaction.atomic():
             servicio = get_object_or_404(
                 Servicio.objects.select_for_update(), pk=id_servicio
             )
-
             postulacion = Postulacion.objects.filter(
                 servicio_id=id_servicio,
                 proveedor_id=request.user.id_usuario,
@@ -369,54 +355,80 @@ class CompletarServicioView(APIView):
                 )
             if servicio.estado_id != PROGRESO:
                 raise PermissionDenied(
-                    'Solo puedes completar un servicio que esté en progreso.'
+                    'Solo puedes marcar como terminado un servicio que esté '
+                    'en progreso.'
                 )
-            if Calificacion.objects.filter(
-                servicio_id=id_servicio, evaluador_id=request.user.id_usuario
-            ).exists():
-                raise PermissionDenied('Ya calificaste este servicio.')
+            if servicio.trabajo_terminado:
+                raise PermissionDenied(
+                    'Ya marcaste este trabajo como terminado.'
+                )
+
+            servicio.trabajo_terminado = True
+            servicio.save(update_fields=['trabajo_terminado'])
+
+        return Response(
+            {'detail': 'Se avisó al cliente que el trabajo está terminado.'},
+            status=status.HTTP_200_OK,
+        )
+
+
+class PagoEfectivoClienteView(APIView):
+    """
+    El cliente confirma que pagó en efectivo. Crea la transacción (monto
+    calculado en el servidor, nunca confiado del cliente) y completa el
+    servicio. Solo el cliente dueño, y solo si el proveedor ya marcó el
+    trabajo como terminado.
+    """
+    permission_classes = [IsAuthenticated, IsClientRole]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'servicio-completar'
+
+    def post(self, request, id_servicio):
+        with transaction.atomic():
+            servicio = get_object_or_404(
+                Servicio.objects.select_for_update(), pk=id_servicio
+            )
+            if servicio.cliente_id != request.user.id_usuario:
+                raise PermissionDenied(
+                    'No puedes pagar un servicio que no es tuyo.'
+                )
+            if not servicio.trabajo_terminado:
+                raise PermissionDenied(
+                    'El proveedor todavía no marca este trabajo como '
+                    'terminado.'
+                )
+            if servicio.estado_id != PROGRESO:
+                raise PermissionDenied('Este servicio ya no está en progreso.')
+
+            postulacion = Postulacion.objects.filter(
+                servicio_id=id_servicio, estado_id=ACEPTADO,
+            ).first()
+            if postulacion is None:
+                raise PermissionDenied(
+                    'Este servicio no tiene un proveedor asignado.'
+                )
 
             expirar_pago_vencido(id_servicio)
 
-            if metodo_pago == 'efectivo':
-                if Transaccion.objects.filter(
-                    servicio_id=id_servicio, metodo_pago='tarjeta',
-                    estado__in=['pendiente', 'completada'],
-                ).exists():
-                    raise PermissionDenied(
-                        'Este servicio ya inició un pago con tarjeta, no '
-                        'puedes completarlo como efectivo.'
-                    )
-
-                monto = precio_acordado(postulacion)
-                comision = calcular_comision(monto)
-                Transaccion.objects.create(
-                    servicio=servicio,
-                    cliente_id=servicio.cliente_id,
-                    proveedor_id=request.user.id_usuario,
-                    monto=monto,
-                    comision=comision,
-                    estado='completada',
-                    metodo_pago='efectivo',
+            if Transaccion.objects.filter(
+                servicio_id=id_servicio, metodo_pago='tarjeta',
+                estado__in=['pendiente', 'completada'],
+            ).exists():
+                raise PermissionDenied(
+                    'Este servicio ya inició un pago con tarjeta, no '
+                    'puedes pagarlo en efectivo.'
                 )
-            else:
-                pago_completado = Transaccion.objects.filter(
-                    servicio_id=id_servicio,
-                    proveedor_id=request.user.id_usuario,
-                    metodo_pago='tarjeta',
-                    estado='completada',
-                ).exists()
-                if not pago_completado:
-                    raise PermissionDenied(
-                        'El pago con tarjeta todavía no se ha completado.'
-                    )
 
-            Calificacion.objects.create(
+            monto = precio_acordado(postulacion)
+            comision = calcular_comision(monto)
+            Transaccion.objects.create(
                 servicio=servicio,
-                evaluador_id=request.user.id_usuario,
-                evaluado_id=servicio.cliente_id,
-                puntuacion=puntuacion,
-                comentario=comentario,
+                cliente_id=servicio.cliente_id,
+                proveedor_id=postulacion.proveedor_id,
+                monto=monto,
+                comision=comision,
+                estado='completada',
+                metodo_pago='efectivo',
             )
 
             servicio.estado_id = COMPLETADO
@@ -525,13 +537,19 @@ class PendienteCalificarView(APIView):
         })
 
 
-class IniciarPagoView(APIView):
-    """Inicia un cobro con tarjeta. Solo el proveedor asignado, y solo si el servicio está en progreso."""
+class CalificarClienteView(APIView):
+    """Crea el rating del proveedor hacia el cliente. Solo el proveedor
+    asignado, y solo si el servicio ya está completado (pago resuelto)."""
     permission_classes = [IsAuthenticated, IsProviderRole]
     throttle_classes = [ScopedRateThrottle]
-    throttle_scope = 'pago-iniciar'
+    throttle_scope = 'servicio-calificar'
 
     def post(self, request, id_servicio):
+        serializer = CalificarServicioSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        puntuacion = serializer.validated_data['puntuacion']
+        comentario = serializer.validated_data['comentario']
+
         with transaction.atomic():
             servicio = get_object_or_404(
                 Servicio.objects.select_for_update(), pk=id_servicio
@@ -546,9 +564,146 @@ class IniciarPagoView(APIView):
                 raise PermissionDenied(
                     'No eres el proveedor asignado a este servicio.'
                 )
+            if servicio.estado_id != COMPLETADO:
+                raise PermissionDenied(
+                    'Solo puedes calificar un servicio que ya esté completado.'
+                )
+            if Calificacion.objects.filter(
+                servicio_id=id_servicio, evaluador_id=request.user.id_usuario
+            ).exists():
+                raise PermissionDenied('Ya calificaste este servicio.')
+
+            Calificacion.objects.create(
+                servicio=servicio,
+                evaluador_id=request.user.id_usuario,
+                evaluado_id=servicio.cliente_id,
+                puntuacion=puntuacion,
+                comentario=comentario,
+            )
+
+        return Response(
+            {'detail': 'La calificación se registró correctamente.'},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PendienteCalificarProveedorView(APIView):
+    """
+    Servicio completado más reciente que el proveedor autenticado aún no ha
+    calificado. Backstop de carga — con el nuevo flujo el pago puede
+    resolverse (y completar el servicio) sin ninguna acción del proveedor en
+    esa sesión, así que Realtime solo lo cubre si sigue conectado en ese
+    momento.
+    """
+    permission_classes = [IsAuthenticated, IsProviderRole]
+
+    def get(self, request):
+        calificados_ids = Calificacion.objects.filter(
+            evaluador_id=request.user.id_usuario
+        ).values_list('servicio_id', flat=True)
+
+        postulacion = (
+            Postulacion.objects
+            .filter(
+                proveedor_id=request.user.id_usuario,
+                estado_id=ACEPTADO,
+                servicio__estado_id=COMPLETADO,
+            )
+            .exclude(servicio_id__in=calificados_ids)
+            .select_related('servicio', 'servicio__cliente')
+            .order_by('-servicio__fecha')
+            .first()
+        )
+        if postulacion is None:
+            return Response(None, status=status.HTTP_200_OK)
+
+        servicio = postulacion.servicio
+        return Response({
+            'id_servicio': servicio.id_servicio,
+            'titulo': servicio.titulo,
+            'cliente_nombre': (
+                f"{servicio.cliente.nombre} {servicio.cliente.apellido_pa}"
+            ),
+            'cliente_foto': servicio.cliente.url_foto_perfil,
+        })
+
+
+class TrabajoTerminadoPendienteView(APIView):
+    """
+    Servicio en progreso más reciente del cliente autenticado que el
+    proveedor ya marcó como terminado y que el cliente todavía no resolvió
+    (sin pago con tarjeta pendiente ni completado). Backstop de carga, igual
+    que PendienteCalificarView / PagoPendienteClienteView.
+    """
+    permission_classes = [IsAuthenticated, IsClientRole]
+
+    def get(self, request):
+        servicio = (
+            Servicio.objects
+            .filter(
+                cliente_id=request.user.id_usuario,
+                estado_id=PROGRESO,
+                trabajo_terminado=True,
+            )
+            .exclude(
+                transacciones__metodo_pago='tarjeta',
+                transacciones__estado__in=['pendiente', 'completada'],
+            )
+            .order_by('-fecha')
+            .first()
+        )
+        if servicio is None:
+            return Response(None, status=status.HTTP_200_OK)
+
+        postulacion = Postulacion.objects.filter(
+            servicio_id=servicio.id_servicio, estado_id=ACEPTADO,
+        ).first()
+        if postulacion is None:
+            return Response(None, status=status.HTTP_200_OK)
+
+        return Response({
+            'id_servicio': servicio.id_servicio,
+            'titulo': servicio.titulo,
+            'monto': precio_acordado(postulacion),
+            'moneda': (
+                servicio.tipo_cambio.nombre if servicio.tipo_cambio_id else 'MXN'
+            ),
+        })
+
+
+class IniciarPagoClienteView(APIView):
+    """Inicia un cobro con tarjeta. Solo el cliente dueño, y solo si el
+    proveedor ya marcó el trabajo como terminado."""
+    permission_classes = [IsAuthenticated, IsClientRole]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'pago-iniciar'
+
+    def post(self, request, id_servicio):
+        with transaction.atomic():
+            servicio = get_object_or_404(
+                Servicio.objects.select_for_update(), pk=id_servicio
+            )
+
+            if servicio.cliente_id != request.user.id_usuario:
+                raise PermissionDenied(
+                    'No puedes pagar un servicio que no es tuyo.'
+                )
+            if not servicio.trabajo_terminado:
+                raise PermissionDenied(
+                    'El proveedor todavía no marca este trabajo como '
+                    'terminado.'
+                )
             if servicio.estado_id != PROGRESO:
                 raise PermissionDenied(
                     'Solo puedes iniciar un cobro para un servicio en progreso.'
+                )
+
+            postulacion = Postulacion.objects.filter(
+                servicio_id=id_servicio, estado_id=ACEPTADO,
+            ).first()
+            if postulacion is None:
+                raise PermissionDenied(
+                    'Este servicio no tiene un proveedor asignado.'
                 )
 
             expirar_pago_vencido(id_servicio)
@@ -576,7 +731,7 @@ class IniciarPagoView(APIView):
                     currency=moneda,
                     metadata={
                         'id_servicio': id_servicio,
-                        'id_proveedor': str(request.user.id_usuario),
+                        'id_proveedor': str(postulacion.proveedor_id),
                         'id_cliente': str(servicio.cliente_id),
                     },
                 )
@@ -589,7 +744,7 @@ class IniciarPagoView(APIView):
             transaccion = Transaccion.objects.create(
                 servicio=servicio,
                 cliente_id=servicio.cliente_id,
-                proveedor_id=request.user.id_usuario,
+                proveedor_id=postulacion.proveedor_id,
                 monto=monto,
                 comision=comision,
                 estado='pendiente',
@@ -855,9 +1010,22 @@ class StripeWebhookView(View):
                 # rechazos previos (Stripe permite confirmar el mismo intent
                 # con otra tarjeta cuantas veces haga falta), así que el
                 # éxito manda sin importar el estado local actual.
-                Transaccion.objects.select_for_update().filter(
-                    stripe_payment_intent_id=intent['id'],
-                ).exclude(estado='completada').update(estado='completada')
+                transacciones = list(
+                    Transaccion.objects.select_for_update().filter(
+                        stripe_payment_intent_id=intent['id'],
+                    ).exclude(estado='completada')
+                )
+                for t in transacciones:
+                    t.estado = 'completada'
+                    t.save(update_fields=['estado'])
+
+                    # El pago con tarjeta es lo que completa el servicio —
+                    # antes esto pasaba solo cuando el proveedor calificaba;
+                    # ahora se completa aquí mismo para que ambos lados vean
+                    # el modal de calificación al mismo tiempo, vía Realtime.
+                    Servicio.objects.select_for_update().filter(
+                        pk=t.servicio_id, estado_id=PROGRESO,
+                    ).update(estado_id=COMPLETADO)
             else:
                 # Un rechazo NO es terminal: el intent sigue vivo y el
                 # cliente puede reintentar con otra tarjeta en el mismo
