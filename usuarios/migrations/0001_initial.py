@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS usuario (
     fecha_registro timestamptz NOT NULL DEFAULT now(),
     estado boolean NOT NULL DEFAULT true,
     disponible boolean NOT NULL DEFAULT true,
+    fecha_nacimiento date NULL,
     id_rol integer NOT NULL,
     id_categoria integer NULL,
     id_empresa integer NULL
