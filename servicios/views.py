@@ -971,6 +971,14 @@ class PagoEnCursoProveedorView(APIView):
             Transaccion.objects
             .filter(proveedor_id=request.user.id_usuario, metodo_pago='tarjeta')
             .exclude(servicio__estado_id=COMPLETADO)
+            # 'cancelada' ya está resuelta (el proveedor la cerró o expiró) —
+            # no hay nada que retomar. Sin este exclude, un servicio con una
+            # tarjeta cancelada pero que sigue en progreso (el trabajo aún no
+            # se vuelve a marcar como terminado) reabre el modal de "esperando
+            # pago" en cada carga de "Mis Trabajos" y el proveedor ya no puede
+            # cancelarla porque el backend correctamente rechaza cancelar algo
+            # que no está pendiente.
+            .exclude(estado='cancelada')
             .select_related('servicio__tipo_cambio')
             .order_by('-fecha')
             .first()
