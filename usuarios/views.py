@@ -527,13 +527,25 @@ class MisPublicacionesPagination(PageNumberPagination):
     max_page_size = 50
 
 
+class MisPublicacionesListPagination(PageNumberPagination):
+    """8 por página — misma cantidad que usa la pantalla 'Mis Publicaciones'
+    del cliente para paginar en el front."""
+    page_size = 8
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
 class MisPublicacionesView(ListAPIView):
-    """Todas las publicaciones de un cliente, paginadas y filtrables."""
+    """Todas las publicaciones de un cliente, paginadas y filtrables.
+    Filtros opcionales via query params:
+      ?categoria_id=1
+      ?estado_id=7           (un solo id_estado)
+      ?estado_id=1,3,4,6,8   (varios, coma-separados — ej. bucket "en progreso")
+      ?search=texto          (icontains sobre el titulo)
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = ServicioListSerializer
-    pagination_class = MisPublicacionesPagination
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['estado', 'categoria_id']
+    pagination_class = MisPublicacionesListPagination
 
     def get_queryset(self):
         id_usuario = self.kwargs['id_usuario']
@@ -541,7 +553,23 @@ class MisPublicacionesView(ListAPIView):
             raise PermissionDenied(
                 'No puedes ver las publicaciones de otro usuario.'
             )
-        return Servicio.objects.filter(cliente_id=id_usuario).order_by('-fecha')
+        qs = Servicio.objects.filter(cliente_id=id_usuario).order_by('-fecha')
+
+        categoria_id = self.request.query_params.get('categoria_id')
+        if categoria_id:
+            qs = qs.filter(categoria_id=categoria_id)
+
+        estado_id = self.request.query_params.get('estado_id')
+        if estado_id:
+            ids = [int(x) for x in estado_id.split(',') if x.strip().isdigit()]
+            if ids:
+                qs = qs.filter(estado_id__in=ids)
+
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(titulo__icontains=search)
+
+        return qs
 
 
 class DisponibilidadView(APIView):

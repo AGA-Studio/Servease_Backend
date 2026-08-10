@@ -14,6 +14,7 @@ class VistaTrabajosAplicados(models.Model):
     tiempo_transcurrido = models.DurationField()
     precio_final = models.DecimalField(max_digits=10, decimal_places=2)
     foto = models.URLField(max_length=500, blank=True, null=True)
+    trabajo_terminado = models.BooleanField(default=False)
 
     class Meta:
         managed = False
