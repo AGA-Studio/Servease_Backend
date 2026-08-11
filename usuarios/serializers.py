@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from dashBoard.models.vista_trabajos_disponibles import VistaTrabajosDisponibles
 from servicios.models import Servicio, Oferta
+from .validators import validate_birthdate, validate_name, validate_phone
 from .models import (
     Categoria,
     Usuario,
@@ -51,15 +52,15 @@ class UsuarioSerializer(serializers.ModelSerializer):
 class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(min_length=6, write_only=True)
-    nombre = serializers.CharField(max_length=100)
+    nombre = serializers.CharField(max_length=100, validators=[validate_name])
     segundo_nombre = serializers.CharField(
-        max_length=100, required=False, allow_blank=True
+        max_length=100, required=False, allow_blank=True, validators=[validate_name]
     )
-    apellido_pa = serializers.CharField(max_length=100)
+    apellido_pa = serializers.CharField(max_length=100, validators=[validate_name])
     apellido_ma = serializers.CharField(
-        max_length=100, required=False, allow_blank=True
+        max_length=100, required=False, allow_blank=True, validators=[validate_name]
     )
-    fecha_nacimiento = serializers.DateField()
+    fecha_nacimiento = serializers.DateField(validators=[validate_birthdate])
     photo = serializers.ImageField(required=False, allow_null=True)
 
 
@@ -79,6 +80,21 @@ class UpdateProfilePhotoSerializer(serializers.Serializer):
         return value
 
 class UpdatePersonalInfoSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(max_length=100, validators=[validate_name])
+    segundo_nombre = serializers.CharField(
+        max_length=100, required=False, allow_blank=True, allow_null=True,
+        validators=[validate_name],
+    )
+    apellido_pa = serializers.CharField(max_length=100, validators=[validate_name])
+    apellido_ma = serializers.CharField(
+        max_length=100, required=False, allow_blank=True, allow_null=True,
+        validators=[validate_name],
+    )
+    celular = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, allow_null=True,
+        validators=[validate_phone],
+    )
+
     class Meta:
         model = Usuario
         fields = [
