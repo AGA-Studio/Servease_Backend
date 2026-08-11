@@ -556,8 +556,8 @@ class MisPublicacionesView(ListAPIView):
         qs = Servicio.objects.filter(cliente_id=id_usuario).order_by('-fecha')
 
         categoria_id = self.request.query_params.get('categoria_id')
-        if categoria_id:
-            qs = qs.filter(categoria_id=categoria_id)
+        if categoria_id and categoria_id.strip().isdigit():
+            qs = qs.filter(categoria_id=int(categoria_id))
 
         estado_id = self.request.query_params.get('estado_id')
         if estado_id:

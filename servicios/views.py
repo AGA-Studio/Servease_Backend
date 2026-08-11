@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -45,9 +46,11 @@ from .serializers import (
     UpdateServicioSerializer,
     CreateOfertaSerializer,
     PostulacionSerializer,
-    CreatePostulacionSerializer, 
-    ConversacionSerializer, 
+    CreatePostulacionSerializer,
+    ConversacionSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ServicioCreateView(APIView):
@@ -661,10 +664,19 @@ class TrabajoTerminadoPendienteView(APIView):
         if postulacion is None:
             return Response(None, status=status.HTTP_200_OK)
 
+        # Este endpoint es solo un backstop de carga (polling pasivo, no una
+        # acción del usuario) — un monto acordado inválido (<=0) no debe
+        # tumbarlo con un 403, simplemente se reporta que no hay nada
+        # pendiente, igual que cuando no hay postulación.
+        try:
+            monto = precio_acordado(postulacion)
+        except PermissionDenied:
+            return Response(None, status=status.HTTP_200_OK)
+
         return Response({
             'id_servicio': servicio.id_servicio,
             'titulo': servicio.titulo,
-            'monto': precio_acordado(postulacion),
+            'monto': monto,
             'moneda': (
                 servicio.tipo_cambio.nombre if servicio.tipo_cambio_id else 'MXN'
             ),
@@ -959,6 +971,14 @@ class PagoEnCursoProveedorView(APIView):
             Transaccion.objects
             .filter(proveedor_id=request.user.id_usuario, metodo_pago='tarjeta')
             .exclude(servicio__estado_id=COMPLETADO)
+            # 'cancelada' ya está resuelta (el proveedor la cerró o expiró) —
+            # no hay nada que retomar. Sin este exclude, un servicio con una
+            # tarjeta cancelada pero que sigue en progreso (el trabajo aún no
+            # se vuelve a marcar como terminado) reabre el modal de "esperando
+            # pago" en cada carga de "Mis Trabajos" y el proveedor ya no puede
+            # cancelarla porque el backend correctamente rechaza cancelar algo
+            # que no está pendiente.
+            .exclude(estado='cancelada')
             .select_related('servicio__tipo_cambio')
             .order_by('-fecha')
             .first()
@@ -1009,13 +1029,37 @@ class StripeWebhookView(View):
                 # El intent puede haber sido reintentado tras uno o varios
                 # rechazos previos (Stripe permite confirmar el mismo intent
                 # con otra tarjeta cuantas veces haga falta), así que el
-                # éxito manda sin importar el estado local actual.
-                transacciones = list(
-                    Transaccion.objects.select_for_update().filter(
-                        stripe_payment_intent_id=intent['id'],
-                    ).exclude(estado='completada')
-                )
-                for t in transacciones:
+                # éxito manda sin importar el estado local actual — EXCEPTO
+                # 'expirada': ese estado significa que expirar_pago_vencido()
+                # ya le avisó al cliente que puede pagar por otra vía (p.ej.
+                # efectivo), así que si un webhook tardío llega para un
+                # intent que ya dimos por perdido, no lo resucitamos (eso
+                # duplicaría el ingreso si el cliente ya pagó en efectivo).
+                # stripe_payment_intent_id es unique, así que esto es 0 o 1
+                # fila — sin loop.
+                t = Transaccion.objects.filter(
+                    stripe_payment_intent_id=intent['id'],
+                ).exclude(estado__in=['completada', 'expirada']).first()
+
+                if t is None:
+                    logger.warning(
+                        'payment_intent.succeeded para intent %s sin '
+                        'transacción local actualizable (ya completada, '
+                        'expirada, o no encontrada) — requiere revisión '
+                        'manual si Stripe sí capturó el pago.',
+                        intent['id'],
+                    )
+                else:
+                    # Mismo orden de locks que PagoEfectivoClienteView /
+                    # IniciarPagoClienteView (Servicio primero, luego
+                    # Transaccion vía expirar_pago_vencido) — invertirlo aquí
+                    # podía producir un deadlock si ambos caminos corrían en
+                    # paralelo sobre el mismo servicio.
+                    servicio = Servicio.objects.select_for_update().filter(
+                        pk=t.servicio_id,
+                    ).first()
+                    t = Transaccion.objects.select_for_update().get(pk=t.pk)
+
                     t.estado = 'completada'
                     t.save(update_fields=['estado'])
 
@@ -1023,9 +1067,17 @@ class StripeWebhookView(View):
                     # antes esto pasaba solo cuando el proveedor calificaba;
                     # ahora se completa aquí mismo para que ambos lados vean
                     # el modal de calificación al mismo tiempo, vía Realtime.
-                    Servicio.objects.select_for_update().filter(
-                        pk=t.servicio_id, estado_id=PROGRESO,
-                    ).update(estado_id=COMPLETADO)
+                    if servicio is not None and servicio.estado_id == PROGRESO:
+                        servicio.estado_id = COMPLETADO
+                        servicio.save(update_fields=['estado_id'])
+                    elif servicio is not None:
+                        logger.warning(
+                            'payment_intent.succeeded: transacción %s '
+                            'marcada completada pero el servicio %s no '
+                            'estaba en PROGRESO (estado_id=%s) — no se '
+                            'completó automáticamente.',
+                            t.pk, servicio.id_servicio, servicio.estado_id,
+                        )
             else:
                 # Un rechazo NO es terminal: el intent sigue vivo y el
                 # cliente puede reintentar con otra tarjeta en el mismo
