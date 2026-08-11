@@ -697,13 +697,22 @@ class UltimasResenasView(ListAPIView):
         )
 
 
+class NotificacionListPagination(PageNumberPagination):
+    """15 por página — evita cargar todo el historial de notificaciones
+    de un jalón cuando hay muchas."""
+    page_size = 15
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
 class NotificacionListView(ListAPIView):
     """Notificaciones del usuario autenticado, mas recientes primero.
     Filtro opcional: ?leido=true o ?leido=false
     """
     permission_classes = [IsAuthenticated]
     serializer_class = NotificacionSerializer
- 
+    pagination_class = NotificacionListPagination
+
     def get_queryset(self):
         queryset = Notificacion.objects.filter(usuario=self.request.user).order_by('-fecha')
         leido = self.request.query_params.get('leido')
