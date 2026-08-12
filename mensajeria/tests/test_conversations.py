@@ -171,22 +171,26 @@ class ConversationTests(TestCase):
         results = self._get_results(resp)
         self.assertEqual(len(results), 0)
 
-    def test_list_conversations_only_active(self):
-        """GET only returns active (not archived) conversations."""
+    def test_list_conversations_includes_archived(self):
+        """GET returns both active and archived conversations, flagged via
+        `archivada`, so the frontend can split them into active/past
+        sections instead of losing archived chats from the list."""
         from mensajeria.models import Conversacion
         from servicios.models.estado import ACTIVA, ARCHIVADA
 
         conv = Conversacion.objects.create(
             cliente=self.cliente, proveedor=self.proveedor, estado_id=ACTIVA
         )
-        Conversacion.objects.create(
+        conv_archivada = Conversacion.objects.create(
             cliente=self.cliente, proveedor=self.proveedor2, estado_id=ARCHIVADA
         )
         self.client.force_authenticate(user=self.cliente)
         resp = self.client.get("/api/mensajeria/conversaciones/")
         results = self._get_results(resp)
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]["id"], conv.id_conversacion)
+        self.assertEqual(len(results), 2)
+        by_id = {r["id"]: r for r in results}
+        self.assertFalse(by_id[conv.id_conversacion]["archivada"])
+        self.assertTrue(by_id[conv_archivada.id_conversacion]["archivada"])
 
     def test_list_conversations_search_by_name(self):
         """GET ?q= filters by other participant's name."""

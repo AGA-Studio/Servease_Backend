@@ -12,6 +12,7 @@ class Mensaje(models.Model):
     TIPO_MENSAJE_CHOICES = (
         ("texto", "Texto"),
         ("archivo", "Archivo"),
+        ("ubicacion", "Ubicación"),
     )
 
     id_mensaje = models.AutoField(primary_key=True)
@@ -25,7 +26,20 @@ class Mensaje(models.Model):
     tipo_mensaje = models.CharField(
         max_length=20, choices=TIPO_MENSAJE_CHOICES, default="texto"
     )
-    archivo = models.FileField(upload_to="mensajes/archivos/", null=True, blank=True)
+    # Path dentro del bucket privado de Supabase Storage (mensajeria_archivos)
+    # — NO un FileField en disco local: en despliegues con filesystem
+    # efímero (gunicorn/Render/etc.) los archivos guardados localmente se
+    # perdían en cada redeploy/reinicio de instancia.
+    archivo_path = models.CharField(max_length=500, blank=True, default="")
+    # Nombre original del archivo (el storage lo renombra para evitar
+    # colisiones), para poder mostrarlo/inferir su tipo en el chat.
+    archivo_nombre = models.CharField(max_length=255, blank=True, default="")
+    latitud = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitud = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
     deleted_at = models.DateTimeField(null=True, blank=True)
     reply_to = models.ForeignKey(
         "self",

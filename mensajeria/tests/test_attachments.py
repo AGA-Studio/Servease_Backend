@@ -84,7 +84,8 @@ class AttachmentTests(TestCase):
         self.assertEqual(resp.data["text"], "Mira esta foto")
         self.assertEqual(resp.data["tipo_mensaje"], "archivo")
         self.assertIn("archivo", resp.data)
-        self.assertTrue(resp.data["archivo"].endswith(".jpg"))
+        self.assertTrue(resp.data["archivo"])
+        self.assertEqual(resp.data["archivo_nombre"], "test.jpg")
 
     def test_send_message_with_pdf_attachment(self):
         """POST with PDF file creates message with attachment."""
@@ -98,7 +99,8 @@ class AttachmentTests(TestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data["tipo_mensaje"], "archivo")
-        self.assertTrue(resp.data["archivo"].endswith(".pdf"))
+        self.assertTrue(resp.data["archivo"])
+        self.assertEqual(resp.data["archivo_nombre"], "test.pdf")
 
     def test_send_message_attachment_only_no_text(self):
         """POST with only attachment (no contenido) is valid."""
@@ -193,7 +195,7 @@ class AttachmentTests(TestCase):
         msg = results[0]
         self.assertEqual(msg["tipo_mensaje"], "archivo")
         self.assertIn("archivo", msg)
-        self.assertTrue(msg["archivo"].endswith(".jpg"))
+        self.assertTrue(msg["archivo"])
 
     def test_message_detail_includes_attachment(self):
         """GET message detail includes attachment URL."""

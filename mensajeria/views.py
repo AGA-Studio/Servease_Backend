@@ -1,6 +1,9 @@
-from django.core.files.storage import default_storage
-from django.db.models import F, Q
-from django.http import FileResponse, Http404
+import logging
+import mimetypes
+
+from django.db.models import Q
+from django.db.models.functions import Coalesce
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -13,6 +16,7 @@ from rest_framework.views import APIView
 from mensajeria.models import Conversacion, Mensaje
 from mensajeria.permissions import IsEmisor, IsParticipant
 from mensajeria.realtime import publish_event
+from mensajeria.storage import download_mensaje_archivo, upload_mensaje_archivo
 from mensajeria.serializers import (
     ConversacionDetailSerializer,
     ConversacionListSerializer,
@@ -21,6 +25,8 @@ from mensajeria.serializers import (
     MensajeSerializer,
 )
 from servicios.models.estado import ACTIVA, ARCHIVADA
+
+logger = logging.getLogger(__name__)
 
 
 class ConversacionListCreateView(APIView):
@@ -31,9 +37,12 @@ class ConversacionListCreateView(APIView):
 
     def get(self, request):
         q = request.query_params.get("q", "").strip()
+        # Incluye archivadas (servicio completado) para que el sidebar pueda
+        # mostrarlas en su propia sección "pasados" — antes desaparecían
+        # de la lista por completo al archivarse.
         conversations = Conversacion.objects.filter(
             Q(cliente=request.user) | Q(proveedor=request.user),
-            estado_id=ACTIVA,
+            estado_id__in=(ACTIVA, ARCHIVADA),
         )
         if q:
             conversations = conversations.filter(
@@ -49,7 +58,9 @@ class ConversacionListCreateView(APIView):
             "proveedor__rol",
             "cliente__categoria",
             "proveedor__categoria",
-        ).order_by(F("ultimo_mensaje_fecha").desc(nulls_last=True), "-fecha_inicio")
+        ).annotate(
+            ultima_actividad=Coalesce("ultimo_mensaje_fecha", "fecha_inicio"),
+        ).order_by("-ultima_actividad")
 
         paginator = PageNumberPagination()
         paginator.page_size = 20
@@ -188,6 +199,12 @@ class MensajeListCreateView(APIView):
         conversacion = get_object_or_404(Conversacion, pk=id_conversacion)
         self.check_object_permissions(request, conversacion)
 
+        if conversacion.estado_id == ARCHIVADA:
+            return Response(
+                {"detail": "Esta conversación está archivada y no admite nuevos mensajes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = CreateMensajeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -205,7 +222,17 @@ class MensajeListCreateView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        tipo = "archivo" if validated.get("archivo") else "texto"
+        archivo = validated.get("archivo")
+        latitud = validated.get("latitud")
+        longitud = validated.get("longitud")
+        if latitud is not None:
+            latitud = round(latitud, 6)
+            longitud = round(longitud, 6)
+            tipo = "ubicacion"
+        elif archivo:
+            tipo = "archivo"
+        else:
+            tipo = "texto"
         # receptor = el otro participante de la conversación (requerido por el
         # trigger remoto notificar_nuevo_mensaje() y la vista vista_conversaciones).
         receptor = (
@@ -213,17 +240,40 @@ class MensajeListCreateView(APIView):
             if request.user.id_usuario == conversacion.cliente_id
             else conversacion.cliente
         )
+
+        archivo_path = ""
+        if archivo:
+            try:
+                archivo_path = upload_mensaje_archivo(conversacion.id_conversacion, archivo)
+            except Exception:
+                logger.exception(
+                    "Fallo al subir adjunto a Supabase Storage (conversacion %s)",
+                    conversacion.id_conversacion,
+                )
+                return Response(
+                    {"detail": "No se pudo guardar el archivo. Intenta de nuevo."},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
         mensaje = Mensaje.objects.create(
             conversacion=conversacion,
             emisor=request.user,
             receptor=receptor,
             contenido=validated.get("contenido", ""),
-            archivo=validated.get("archivo"),
+            archivo_path=archivo_path,
+            archivo_nombre=archivo.name if archivo else "",
+            latitud=latitud,
+            longitud=longitud,
             reply_to=reply_to,
             tipo_mensaje=tipo,
         )
 
-        preview = mensaje.contenido[:200] if mensaje.contenido else "📎 Archivo adjunto"
+        if mensaje.contenido:
+            preview = mensaje.contenido[:200]
+        elif tipo == "ubicacion":
+            preview = "📍 Ubicación compartida"
+        else:
+            preview = "📎 Archivo adjunto"
         conversacion.ultimo_mensaje_preview = preview
         conversacion.ultimo_mensaje_fecha = mensaje.fecha
         conversacion.save(update_fields=["ultimo_mensaje_preview", "ultimo_mensaje_fecha"])
@@ -338,15 +388,19 @@ class MensajeArchivoView(APIView):
         mensaje = get_object_or_404(Mensaje, pk=id_mensaje, deleted_at__isnull=True)
         self.check_object_permissions(request, mensaje.conversacion)
 
-        if not mensaje.archivo:
+        if not mensaje.archivo_path:
             raise Http404("No hay archivo adjunto.")
 
-        file_path = mensaje.archivo.path
-        if not default_storage.exists(file_path):
+        try:
+            data = download_mensaje_archivo(mensaje.archivo_path)
+        except Exception:
+            logger.exception(
+                "Fallo al descargar adjunto %s de Supabase Storage", mensaje.archivo_path
+            )
             raise Http404("Archivo no encontrado.")
 
-        response = FileResponse(default_storage.open(file_path, "rb"))
-        response["Content-Disposition"] = (
-            f'attachment; filename="{mensaje.archivo.name}"'
-        )
+        filename = mensaje.archivo_nombre or "adjunto"
+        content_type, _ = mimetypes.guess_type(filename)
+        response = HttpResponse(data, content_type=content_type or "application/octet-stream")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
