@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from calificaciones.models import Calificacion
 from mensajeria.models import Conversacion, Mensaje
-from servicios.models.estado import ACTIVA
+from servicios.models.estado import ACTIVA, ARCHIVADA
 from usuarios.models import Usuario
 
 
@@ -59,6 +59,7 @@ class ConversacionListSerializer(serializers.ModelSerializer):
     servicio_titulo = serializers.CharField(source="servicio.titulo", default=None, read_only=True)
     cliente_id = serializers.UUIDField(read_only=True)
     proveedor_id = serializers.UUIDField(read_only=True)
+    archivada = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversacion
@@ -74,7 +75,11 @@ class ConversacionListSerializer(serializers.ModelSerializer):
             "servicio_titulo",
             "cliente_id",
             "proveedor_id",
+            "archivada",
         )
+
+    def get_archivada(self, obj):
+        return obj.estado_id == ARCHIVADA
 
     def _get_other_user(self, obj):
         user = self.context["request"].user
@@ -132,6 +137,7 @@ class ConversacionDetailSerializer(serializers.ModelSerializer):
     servicio = ServicioMinimoSerializer(read_only=True)
     cliente_id = serializers.UUIDField(read_only=True)
     proveedor_id = serializers.UUIDField(read_only=True)
+    archivada = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversacion
@@ -144,7 +150,11 @@ class ConversacionDetailSerializer(serializers.ModelSerializer):
             "servicio",
             "cliente_id",
             "proveedor_id",
+            "archivada",
         )
+
+    def get_archivada(self, obj):
+        return obj.estado_id == ARCHIVADA
 
 
 class MensajeSerializer(serializers.ModelSerializer):
@@ -161,7 +171,13 @@ class MensajeSerializer(serializers.ModelSerializer):
     time = serializers.SerializerMethodField()
     estado_entrega = serializers.CharField(read_only=True)
     tipo_mensaje = serializers.CharField(read_only=True)
-    archivo = serializers.FileField(read_only=True)
+    # El bucket es privado — no exponemos el storage path ni una URL
+    # utilizable directamente, solo si hay adjunto o no. La descarga real
+    # pasa siempre por MensajeArchivoView (auth + IsParticipant).
+    archivo = serializers.SerializerMethodField()
+    archivo_nombre = serializers.CharField(read_only=True)
+    latitud = serializers.FloatField(read_only=True)
+    longitud = serializers.FloatField(read_only=True)
     reply_to = serializers.SerializerMethodField()
 
     class Meta:
@@ -178,6 +194,9 @@ class MensajeSerializer(serializers.ModelSerializer):
             "estado_entrega",
             "tipo_mensaje",
             "archivo",
+            "archivo_nombre",
+            "latitud",
+            "longitud",
             "reply_to",
         )
 
@@ -204,6 +223,9 @@ class MensajeSerializer(serializers.ModelSerializer):
         if obj.reply_to:
             return obj.reply_to.id_mensaje
         return None
+
+    def get_archivo(self, obj):
+        return bool(obj.archivo_path)
 
 
 class CreateConversacionSerializer(serializers.Serializer):
@@ -265,12 +287,29 @@ _MAGIC_BYTES = {
     "application/pdf": (b"%PDF-",),
 }
 
+ALLOWED_ARCHIVO_TYPES = (
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+    "application/pdf",
+    "text/plain",
+)
+
 
 def _matches_magic(archivo):
     """Verify file content matches its declared content_type (magic bytes)."""
     ct = archivo.content_type
     if ct == "text/plain":
         return True  # no reliable binary signature; accept text
+    if ct == "image/svg+xml":
+        # SVG es texto/XML, no tiene firma binaria — se valida que el
+        # contenido realmente sea un <svg>, y se rechaza si trae <script>
+        # (el <img> del chat no lo ejecutaría, pero mejor no aceptarlo).
+        head = archivo.read(2000).lower()
+        archivo.seek(0)
+        return b"<svg" in head and b"<script" not in head
     signatures = _MAGIC_BYTES.get(ct)
     if not signatures:
         return False
@@ -284,30 +323,42 @@ def _matches_magic(archivo):
 class CreateMensajeSerializer(serializers.Serializer):
     contenido = serializers.CharField(max_length=2000, required=False, allow_blank=True)
     archivo = serializers.FileField(required=False)
+    # FloatField (no restricción de dígitos) — el GPS del dispositivo manda
+    # más decimales de los que el modelo guarda; se redondean a 6 decimales
+    # en la vista antes de guardarlos, en vez de rechazar la precisión extra.
+    latitud = serializers.FloatField(
+        required=False, allow_null=True, min_value=-90, max_value=90,
+    )
+    longitud = serializers.FloatField(
+        required=False, allow_null=True, min_value=-180, max_value=180,
+    )
     reply_to = serializers.IntegerField(required=False)
 
     def validate(self, attrs):
         contenido = attrs.get("contenido", "").strip() if attrs.get("contenido") else ""
         archivo = attrs.get("archivo")
-        if not contenido and not archivo:
+        latitud = attrs.get("latitud")
+        longitud = attrs.get("longitud")
+        if (latitud is None) != (longitud is None):
+            raise serializers.ValidationError(
+                "Debes enviar latitud y longitud juntas."
+            )
+        if not contenido and not archivo and latitud is None:
             raise serializers.ValidationError("El mensaje no puede estar vacio.")
         if contenido and len(contenido) > 2000:
             raise serializers.ValidationError(
                 "El mensaje no puede exceder 2000 caracteres."
             )
         if archivo:
-            allowed_types = [
-                "image/jpeg",
-                "image/png",
-                "image/gif",
-                "image/webp",
-                "application/pdf",
-                "text/plain",
-            ]
-            if archivo.content_type not in allowed_types:
-                raise serializers.ValidationError("Tipo de archivo no permitido.")
+            if archivo.content_type not in ALLOWED_ARCHIVO_TYPES:
+                raise serializers.ValidationError(
+                    "Tipo de archivo no permitido. Solo imágenes (JPG, PNG, "
+                    "GIF, WEBP, SVG) y documentos (PDF, TXT)."
+                )
             if archivo.size > 10 * 1024 * 1024:
-                raise serializers.ValidationError("El archivo no puede exceder 10MB.")
+                raise serializers.ValidationError(
+                    "El archivo excede el límite de 10MB."
+                )
             if not _matches_magic(archivo):
                 raise serializers.ValidationError(
                     "El contenido del archivo no coincide con su tipo declarado."

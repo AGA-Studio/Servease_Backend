@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db.models import Avg
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from calificaciones.models import Calificacion
@@ -78,6 +79,13 @@ class CreateServicioSerializer(serializers.ModelSerializer):
             'latitud', 'longitud', 'fecha','imagenes', 'id_categoria',
             'id_tipo_cambio', 'fecha_final',
         ]
+
+    def validate_fecha_final(self, value):
+        if value is not None and value < timezone.now():
+            raise serializers.ValidationError(
+                'La fecha no puede ser anterior a la fecha y hora actuales.'
+            )
+        return value
 
     def validate_imagenes(self, value):
         usuario = self.context['request'].user

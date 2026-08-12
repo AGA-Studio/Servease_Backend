@@ -27,9 +27,11 @@ from usuarios.permissions import IsClientRole
 from .models import Servicio, VistaInfoAplicantes, VistaPostDetails,Postulacion,VistaConversaciones   
 
 from calificaciones.models import Calificacion
+from dashBoard.models import VistaDashboardProveedor
 from mensajeria.models import Conversacion
+from mensajeria.services import archivar_conversaciones_de_servicio
 from transacciones.models import Transaccion
-from usuarios.models import Notificacion
+from usuarios.models import Notificacion, VistaPerfilCliente
 from usuarios.permissions import IsClientRole, IsProviderRole
 from .models import Oferta, Postulacion, Servicio, VistaInfoAplicantes, VistaPostDetails
 from .models.estado import ABIERTO, ACEPTADO, ACTIVA, CANCELADO, COMPLETADO, PENDIENTE, PROGRESO, RECHAZADA
@@ -436,6 +438,7 @@ class PagoEfectivoClienteView(APIView):
 
             servicio.estado_id = COMPLETADO
             servicio.save(update_fields=['estado_id'])
+            archivar_conversaciones_de_servicio(servicio.id_servicio)
 
         return Response(
             {'detail': 'El servicio se completó correctamente.'},
@@ -527,9 +530,17 @@ class PendienteCalificarView(APIView):
             .first()
         )
 
+        stats = (
+            VistaDashboardProveedor.objects.filter(
+                pk=postulacion.proveedor_id
+            ).first()
+            if postulacion else None
+        )
+
         return Response({
             'id_servicio': servicio.id_servicio,
             'titulo': servicio.titulo,
+            'proveedor_id': postulacion.proveedor_id if postulacion else None,
             'proveedor_nombre': (
                 f"{postulacion.proveedor.nombre} {postulacion.proveedor.apellido_pa}"
                 if postulacion else ''
@@ -537,6 +548,8 @@ class PendienteCalificarView(APIView):
             'proveedor_foto': (
                 postulacion.proveedor.url_foto_perfil if postulacion else None
             ),
+            'rating': stats.promedio_calificacion if stats else 0,
+            'num_reviews': stats.num_reviews if stats else 0,
         })
 
 
@@ -621,13 +634,18 @@ class PendienteCalificarProveedorView(APIView):
             return Response(None, status=status.HTTP_200_OK)
 
         servicio = postulacion.servicio
+        stats = VistaPerfilCliente.objects.filter(pk=servicio.cliente_id).first()
+
         return Response({
             'id_servicio': servicio.id_servicio,
             'titulo': servicio.titulo,
+            'cliente_id': servicio.cliente_id,
             'cliente_nombre': (
                 f"{servicio.cliente.nombre} {servicio.cliente.apellido_pa}"
             ),
             'cliente_foto': servicio.cliente.url_foto_perfil,
+            'rating': stats.rating if stats else 0,
+            'num_reviews': stats.num_reviews if stats else 0,
         })
 
 
@@ -1070,6 +1088,7 @@ class StripeWebhookView(View):
                     if servicio is not None and servicio.estado_id == PROGRESO:
                         servicio.estado_id = COMPLETADO
                         servicio.save(update_fields=['estado_id'])
+                        archivar_conversaciones_de_servicio(servicio.id_servicio)
                     elif servicio is not None:
                         logger.warning(
                             'payment_intent.succeeded: transacción %s '
